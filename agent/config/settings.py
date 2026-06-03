@@ -28,7 +28,6 @@ class BudgetSettings:
 class AgentSettings:
     identity_file: str = ""
     guidance_file: str = ""
-    workspace_context_file: str = ""
 
 
 @dataclass
