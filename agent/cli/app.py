@@ -18,6 +18,7 @@ from agent.cli.commands import CommandDispatcher
 from agent.cli.config import load_approval_config
 from agent.cli.render import Renderer
 from agent.core.context import RunContext
+from agent.core.factory import build_runner
 from agent.core.runner import AgentRunner
 from agent.events import (
     ApprovalRequest,
@@ -29,11 +30,12 @@ from agent.events import (
     ToolDone,
     ToolStart,
 )
-from agent.middleware.chain import MiddlewareChain
-from agent.steps.registry import StepRegistry
+from agent.middleware.chain import MiddlewareChain  # noqa: F401
+from agent.steps.registry import StepRegistry  # noqa: F401
 from agent.storage.sqlite import SQLiteTimelineStore
 from agent.timeline.resume import resume
 from agent.timeline.session_factory import create_session_with_default_branch
+from agent.tools.builtin import AUTO_APPROVE_TOOLS
 
 app = typer.Typer(add_completion=False)
 console = Console()
@@ -54,7 +56,8 @@ class CLISession:
         self._render = Renderer(console)
 
         config = load_approval_config(config_path)
-        self._approval = ApprovalHandler(console, auto_approve=set(config.auto_approve))
+        auto_approve = set(config.auto_approve) | AUTO_APPROVE_TOOLS
+        self._approval = ApprovalHandler(console, auto_approve=auto_approve)
         self._commands = CommandDispatcher(store, console)
 
         self._session_id: str = ""
@@ -152,18 +155,10 @@ class CLISession:
             self._render.show_status(ctx.iteration_index, total_tokens, elapsed_ms)
 
 
-def _build_default_runner() -> AgentRunner:
-    """Build a default AgentRunner with empty registry (placeholder)."""
-    return AgentRunner(
-        registry=StepRegistry(),
-        middleware_chain=MiddlewareChain(),
-    )
-
-
 @app.command()
 def main(
     session: Optional[str] = typer.Option(None, "--session", "-s", help="Resume a session by ID"),
-    db: str = typer.Option(".l-agent/timeline.db", "--db", help="SQLite database path"),
+    db: str = typer.Option("workspace/timeline.db", "--db", help="SQLite database path"),
     config: Optional[str] = typer.Option(None, "--config", "-c", help="Config YAML path"),
 ) -> None:
     """L-Agent CLI - Interactive AI Agent."""
@@ -171,8 +166,8 @@ def main(
     db_path.parent.mkdir(parents=True, exist_ok=True)
     store = SQLiteTimelineStore(db_path)
 
-    runner = _build_default_runner()
     config_path = Path(config) if config else None
+    runner = build_runner(config_path)
 
     cli_session = CLISession(runner, store, config_path)
     asyncio.run(cli_session.start(session_id=session))

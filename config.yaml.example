@@ -1,0 +1,48 @@
+# L-Agent 配置文件
+# 默认搜索路径: workspace/config.yaml → ~/.l-agent/config.yaml
+# 也可通过 --config 参数指定
+
+# ═══════════════════════════════════════════
+# LLM 模型配置
+# ═══════════════════════════════════════════
+llm:
+  api_base: "https://api.deepseek.com"
+  api_key: "your-api-key-here"
+  model: "deepseek-chat"
+  temperature: 0.7
+  max_tokens: 4096
+
+# ═══════════════════════════════════════════
+# 运行预算限制
+# ═══════════════════════════════════════════
+budget:
+  max_iterations: 25
+  max_tokens: 200000
+
+# ═══════════════════════════════════════════
+# Agent 人设与行为引导
+# ═══════════════════════════════════════════
+agent:
+  identity: "You are L-Agent, an AI coding assistant. Use the available tools to help the user."
+  guidance: "Be concise. Think step by step. Use tools when needed."
+
+# ═══════════════════════════════════════════
+# 工具审批策略
+# ═══════════════════════════════════════════
+approval:
+  auto_approve:
+    - think
+    - read_file
+    - list_directory
+    - search_file
+    - web_search
+    - web_fetch
+  always_confirm:
+    - terminal
+    - write_file
+
+# ═══════════════════════════════════════════
+# 存储配置
+# ═══════════════════════════════════════════
+storage:
+  db_path: "workspace/timeline.db"
