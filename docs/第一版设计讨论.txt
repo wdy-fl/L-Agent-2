@@ -1,0 +1,6618 @@
+╭─── Claude Code v2.1.138 ─────────────────────────────────────────────────────╮
+│                                 │ Tips for getting started                   │
+│          Welcome back!          │ Run /init to create a CLAUDE.md file with… │
+│                                 │ ────────────────────────────────────────── │
+│             ▐▛███▜▌             │ What's new                                 │
+│            ▝▜█████▛▘            │ Added `rate_limits` field to statusline s… │
+│              ▘▘ ▝▝              │ Added `source: 'settings'` plugin marketp… │
+│                                 │ Added CLI tool usage detection to plugin … │
+│   gpt-5.5 · API Usage Billing   │ /release-notes for more                    │
+│       ~/Desktop/OPC-Agent       │                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+❯ /Users/wangdeyu/Desktop/agent/F-Agent，这个项目是我做的个人Agent助手项目，目  
+  前已经基本完成了，现在我想对F-Agent对设计进行优化得到L-Agent，我对L-Agent的预 
+  期是对Agent的理解和定义更加优雅简洁、切中要害，对Agent运行的各个环节进行抽象  
+  ，实现各环节可插拔、可扩展的灵活配置                                          
+  '/Users/wangdeyu/Desktop/OPC-Agent/L-Agent/design'，这是我在做F-Agent过程中对 
+  Agent这个概念的认识，现在需要你与我讨论L-Agent的设计，先做宏观布局，对齐概念  
+  ，然后再规划推进步骤，最后再做具体的实现细节决策                              
+
+⏺ Skill(superpowers:brainstorming)
+  ⎿  Successfully loaded skill
+
+⏺ 我会先按设计讨论流程建一个简短任务清单，然后快速阅读 F-Agent 与 L-Agent/design
+   的现有材料来对齐上下文。
+
+⏺ 我先查看两个目录的结构和关键文档，避免在没有现状依据的情况下抽象设计。
+
+⏺ Bash(find "/Users/wangdeyu/Desktop/agent/F-Agent" -maxdepth 2 -type f | sort |
+       sed 's#^#/##' | head -200)
+  ⎿  sed: 1: "s#^#/##
+     ": bad flag in substitute command: '#'
+
+⏺ Bash(find "/Users/wangdeyu/Desktop/OPC-Agent/L-Agent/design" -maxdepth 2 -type
+       f | sort | sed 's#^#/##' | head -200)
+  ⎿  sed: 1: "s#^#/##
+     ": bad flag in substitute command: '#'
+
+⏺ 刚才的列表命令在 macOS 的 sed 语法上失败了，我改用更直接的文件查找。
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+⏺ 我发现 L-Agent/design 看起来像单个文件而不是目录，接下来读取它和 F-Agent
+  的核心说明，并让探索子代理并行梳理现有架构。
+
+  Read 4 files (ctrl+o to expand)
+
+⏺ 现有材料显示 F-Agent 已经是“可运行闭环”，而 L-Agent/design 的草稿把 Agent 抽象
+  到了交互、循环、工作区、工具与任务几个概念；我再补看近期提交和核心代码边界。
+
+⏺ Bash(git -C "/Users/wangdeyu/Desktop/agent/F-Agent" log --oneline -8)
+  ⎿  1e48c5c docs:修改README文档
+     cfaa788 Merge branch 'worktree-module-readme-refresh'
+     8b93276 docs: 完善模块 README 文档
+     … +5 lines (ctrl+o to expand)
+
+  Read 3 files (ctrl+o to expand)
+⏺ L-Agent 的宏观抽象很适合用结构图辅助，但我们也可以先用文字推进。
+
+⏺ Some of what we're working on might be easier to explain if I can show it to
+  you in a web browser. I can put together mockups, diagrams, comparisons, and
+  other visuals as we go. This feature is still new and can be token-intensive.
+  Want to try it? (Requires opening a local URL)
+
+✻ Cogitated for 3m 9s
+
+❯ 不需要                                                                        
+
+⏺ 好的，我们先文字讨论。
+
+  我先对齐一个最核心的问题：你希望 L-Agent 相比 F-Agent 的本质变化
+  更接近哪一种？
+
+  A. F-Agent 2.0 重构版：保留现有 CLI
+  个人助手定位，主要优化内部抽象、模块边界和可插拔配置。
+  B. Agent Kernel / Framework：把 CLI 只是一个入口，核心目标是沉淀一套可复用的
+  Agent 运行内核。
+  C. 个人 Agent 产品原型：抽象优化服务于更好的个人助手体验，优先围绕记忆、技能、
+  任务、长期陪伴来设计。
+  D. 研究型 Agent 概念模型：先追求对 Agent
+  本质的优雅定义，代码实现反而是这个模型的一个验证样例。
+
+✻ Crunched for 32s
+
+※ recap: We’re designing L-Agent as a cleaner, more extensible evolution of F-Agent, starting with macro concepts before implementation. Next, answer which direction L-Agent should take: F-Agent 2.0, Agent Kernel, personal Agent product, or research concept model. (disable recaps in /config)
+
+❯ A                                                                             
+
+⏺ 明白，L-Agent 先定位为 F-Agent 2.0 
+  重构版：不急着做通用框架或产品平台，而是在现有 CLI 个人助手闭环上，把 Agent
+  概念、运行环节、扩展边界抽象得更清楚。
+
+  第二个问题：这次设计优化里，你最想优先解决 F-Agent 的哪类“不优雅”？
+
+  A. AgentLoop 
+  过重：模型调用、工具执行、记忆、压缩、持久化等编排混在一个主循环里。
+  B. 概念边界不够清晰：Agent、Session、Workspace、Memory、Skill、Tool、Task
+  之间关系还偏工程堆叠。
+  C. 可插拔配置不足：各环节现在能扩展，但还不是统一的 hook / plugin / pipeline
+  风格。
+  D. 运行生命周期不显式：before agent、before model、after model、after agent
+  等阶段还没有成为一等抽象。
+
+✻ Worked for 13s
+
+❯ 以上都是                                                                      
+
+⏺ 可以，那这四点其实可以合并成一个核心目标：用显式 Agent 生命周期来拆薄 AgentLoo
+  p，并把记忆、技能、工具、任务、压缩、持久化都变成生命周期上的可插拔能力。
+
+  下一个问题：你希望 L-Agent 的宏观抽象核心是下面哪一种？
+
+  A. Lifecycle-first：Agent = 一条可配置运行生命周期，所有能力挂在阶段上。
+  B. Context-first：Agent = 持续构造、转换、压缩、持久化上下文的系统。
+  C. Task-first：Agent = 围绕任务状态推进的执行器，对话只是任务输入方式之一。
+  D. Workspace-first：Agent = 工作区中的长期主体，记忆、技能、工具、任务都是
+  workspace 资源。
+
+✻ Brewed for 13s
+
+❯ A                                                                             
+
+⏺ 好，L-Agent 的第一性抽象就定为 Lifecycle-first。
+
+  我建议先把概念压到一句话：
+
+  ▎ Agent 
+  ▎ 是一个围绕用户输入持续运行的生命周期容器；模型只是生命周期中的一个决策节点，
+  ▎ 工具、记忆、技能、任务、压缩、持久化都是挂载在生命周期阶段上的可替换能力。
+
+  下一个问题：这个生命周期的最小阶段，你更倾向哪种粒度？
+
+  A. 五段式，简洁优先
+  receive → prepare → decide → act → commit
+
+  B. 七段式，贴近现有实现
+  before_agent → before_model → model_call → after_model → tool_call → 
+  after_tool → after_agent
+
+  C. 双层结构，宏观优雅 + 微观可扩展
+  宏观：receive → think → act → commit
+  微观：每个宏观阶段内部再有 hooks / pipeline steps
+
+  D. 事件流式
+  没有固定阶段，所有环节都抽象为事件：UserMessageReceived、ModelCalled、ToolExec
+  uted、MemorySynced 等。
+
+✻ Brewed for 19s
+
+※ recap: We’re designing L-Agent as an F-Agent 2.0 refactor with Lifecycle-first architecture: AgentLoop becomes a thin lifecycle container with pluggable memory, tools, skills, tasks, compression, and persistence. Next: choose the lifecycle stage granularity. (disable recaps in /config)
+
+❯ b                                                                             
+
+⏺ 好，生命周期采用 七段式，贴近现有实现：
+
+  before_agent → before_model → model_call → after_model → tool_call → 
+  after_tool → after_agent
+
+  这样优点是：不把现有 F-Agent 推倒重来，AgentLoop.run() 里的真实步骤几乎可以一
+  一映射到阶段；同时每个阶段都可以逐步变成可注册、可替换、可测试的执行单元。
+
+  下一个问题：你希望生命周期阶段上的可插拔能力，主要采用哪种形态？
+
+  A. Hook 形态：每个阶段允许注册多个 hook，按顺序修改 RunContext，简单直接。
+  B. Middleware 
+  形态：像洋葱模型一样包裹调用链，适合权限、日志、超时、预算等横切逻辑。
+  C. Pipeline Step 形态：每个阶段由多个明确 step 组成，每个 step
+  有输入输出契约，最利于测试和配置。
+  D. 混合形态：阶段内部用 pipeline，横切逻辑用 middleware，轻量事件用 hook。
+
+✻ Cogitated for 13s
+❯ 详细对比一下Hook和Middleware的区别                                            
+
+⏺ Hook 和 Middleware 的核心区别可以一句话概括：
+
+  ▎ Hook 是“在某个时点插入动作”，Middleware 
+  ▎ 是“包住一段执行过程并控制它是否继续”。
+
+  放到 L-Agent 的生命周期里，它们的抽象重心不同。
+
+  ---
+  1. Hook：阶段上的“插槽”
+
+  Hook 更像事件监听器或扩展点。
+
+  例如生命周期：
+
+  before_agent → before_model → model_call → after_model → tool_call →
+  after_tool → after_agent
+
+  每个阶段可以注册多个 hook：
+
+  before_model:
+    - load_memory
+    - load_skill_index
+    - inject_workspace_guidance
+    - check_context_budget
+
+  每个 hook 做一件事：读取或修改 RunContext。
+
+  伪代码大概是：
+
+  for hook in hooks["before_model"]:
+      context = hook(context)
+
+  Hook 的特点
+
+  优点：
+
+  1. 简单直观
+    - 很适合表达：“在模型调用前做某事”“工具调用后做某事”。
+    - 对 F-Agent 现有逻辑改造成本低。
+  2. 阶段感强
+    - L-Agent 既然选择 lifecycle-first，hook 很自然。
+    - before_model、after_tool 这些名字本身就是 hook 插槽。
+  3. 适合能力挂载
+    - 记忆召回可以是 before_model hook。
+    - 技能索引注入可以是 before_model hook。
+    - 工具结果裁剪可以是 after_tool hook。
+    - 记忆同步可以是 after_agent hook。
+    - 会话持久化可以是多个阶段 hook。
+  4. 容易配置
+  lifecycle:
+    before_model:
+      - memory.prefetch
+      - skills.inject_index
+      - context.check_budget
+
+  缺点：
+
+  1. 控制力弱
+    - Hook 通常只“做事”，不负责完整控制调用链。
+    - 它不太适合表达：“我包住 model_call，超时就中断，失败就重试”。
+  2. 执行顺序容易变重要
+    - 比如先注入 memory 还是先压缩 context，会影响结果。
+    - 如果 hook 很多，阶段内部可能变成隐性的 mini pipeline。
+  3. 错误处理容易分散
+    - 每个 hook 失败后是继续、跳过、终止、降级？
+    - 如果没有统一约定，会变乱。
+  4. 跨阶段逻辑不自然
+    - 比如一个预算控制逻辑，需要在 before_model 扣预算，在 after_model
+  记录消耗，在异常时恢复状态。
+    - 用 hook 可以做，但状态会散在多个 hook 里。
+
+  ---
+  2. Middleware：执行链上的“包裹器”
+
+  Middleware 更像拦截器或洋葱模型。
+
+  它不是简单挂在某个时点，而是包住一段核心执行：
+
+  middleware_1(
+    middleware_2(
+      middleware_3(
+        model_call
+      )
+    )
+  )
+
+  伪代码：
+
+  def budget_middleware(context, next):
+      if context.budget.exhausted:
+          return stop()
+      context.budget.consume()
+      return next(context)
+
+  或者：
+
+  def timeout_middleware(context, next):
+      with timeout(60):
+          return next(context)
+
+  Middleware 的特点
+
+  优点：
+
+  1. 控制力强
+    - 可以决定是否继续执行 next()。
+    - 可以提前返回、重试、捕获异常、包装结果。
+  2. 适合横切能力
+    - 预算控制
+    - 超时控制
+    - 重试
+    - 日志追踪
+    - 权限审批
+    - tracing / metrics
+    - sandbox / isolation
+    - error boundary
+  3. 天然适合包住高风险操作
+    - model_call 可以被 timeout、retry、budget、logging middleware 包住。
+    - tool_call 可以被 approval、sandbox、audit、result_truncate middleware
+  包住。
+  4. 前后逻辑集中
+    - 一个 middleware 可以同时处理“调用前”和“调用后”。
+    - 比 hook 更适合有状态的横切逻辑。
+
+  缺点：
+
+  1. 理解成本更高
+    - 洋葱模型不如 hook 直观。
+    - 新增 middleware 时要理解调用顺序和嵌套关系。
+  2. 容易过度抽象
+    - 如果所有东西都做成 middleware，Agent 生命周期会变成一条隐式调用链。
+    - 反而削弱你想要的 before_agent → before_model → ... 显式阶段感。
+  3. 配置不如 hook 直观
+  model_call:
+    middleware:
+      - budget
+      - timeout
+      - retry
+      - tracing
+  3. 这可以配置，但用户要理解谁包谁、异常如何传播。
+  4. 不适合普通能力挂载
+    - 比如“读取 USER.md 注入上下文”用 middleware 就显得重。
+    - “同步记忆”也不需要包住某段执行，hook 更自然。
+
+  ---
+  3. 放到 L-Agent 中的具体区别
+
+  以 before_model → model_call → after_model 为例。
+
+  Hook 风格
+
+  before_model hooks:
+    1. restore_session_context
+    2. prefetch_memory
+    3. inject_skill_index
+    4. check_compression
+
+  model_call:
+    call_llm()
+
+  after_model hooks:
+    1. persist_assistant_message
+    2. parse_tool_calls
+    3. update_token_stats
+
+  这表达的是：
+
+  ▎ 到了某个生命周期阶段，顺序执行一组扩展动作。
+
+  适合“阶段性准备”和“阶段性收尾”。
+
+  ---
+  Middleware 风格
+
+  model_call = tracing(
+    timeout(
+      retry(
+        budget(
+          call_llm
+        )
+      )
+    )
+  )
+
+  这表达的是：
+
+  ▎ 对某个核心操作进行包装、控制和保护。
+
+  适合“围绕一次调用建立控制边界”。
+
+  ---
+  4. 两者在设计哲学上的区别
+
+  ┌────────────────────┬────────────────────────┬────────────────────────┐
+  │        维度        │          Hook          │       Middleware       │
+  ├────────────────────┼────────────────────────┼────────────────────────┤
+  │ 核心隐喻           │ 插槽 / 事件点          │ 包裹 / 拦截链          │
+  ├────────────────────┼────────────────────────┼────────────────────────┤
+  │ 关注点             │ 某个阶段发生什么       │ 某段执行如何被控制     │
+  ├────────────────────┼────────────────────────┼────────────────────────┤
+  │ 是否能阻止后续执行 │ 通常不主张，但可以约定 │ 天然可以               │
+  ├────────────────────┼────────────────────────┼────────────────────────┤
+  │ 是否能包住异常     │ 不自然                 │ 很自然                 │
+  ├────────────────────┼────────────────────────┼────────────────────────┤
+  │ 是否适合配置       │ 很适合                 │ 可以，但顺序语义更复杂 │
+  ├────────────────────┼────────────────────────┼────────────────────────┤
+  │ 是否适合普通能力   │ 很适合                 │ 偏重                   │
+  ├────────────────────┼────────────────────────┼────────────────────────┤
+  │ 是否适合横切能力   │ 一般                   │ 很适合                 │
+  ├────────────────────┼────────────────────────┼────────────────────────┤
+  │ 是否贴合生命周期   │ 很贴合                 │ 辅助生命周期           │
+  ├────────────────────┼────────────────────────┼────────────────────────┤
+  │ 心智负担           │ 低                     │ 中高                   │
+  ├────────────────────┼────────────────────────┼────────────────────────┤
+  │ 滥用风险           │ hook 顺序混乱          │ 调用链过度抽象         │
+  └────────────────────┴────────────────────────┴────────────────────────┘
+
+  ---
+  5. 对 L-Agent 的建议
+
+  我不建议 L-Agent 在宏观生命周期上直接采用纯 Middleware。
+
+  因为你现在的目标是：
+
+  ▎ 对 Agent 运行各环节进行抽象，实现各环节可插拔、可扩展的灵活配置。
+
+  这里的关键词是 运行环节。所以主抽象应该保留清晰的阶段：
+
+  before_agent
+  before_model
+  model_call
+  after_model
+  tool_call
+  after_tool
+  after_agent
+
+  在这个前提下：
+
+  推荐主设计
+
+  生命周期阶段用 Hook / Pipeline Step，关键调用点内部用 Middleware。
+
+  也就是：
+
+  Lifecycle
+    before_agent: hooks / steps
+    before_model: hooks / steps
+
+    model_call:
+      middleware:
+        - budget
+        - timeout
+        - retry
+        - tracing
+      handler:
+        - llm_client.call
+
+    after_model: hooks / steps
+
+    tool_call:
+      middleware:
+        - approval
+        - sandbox
+        - audit
+        - result_limit
+      handler:
+        - tool_registry.dispatch
+
+    after_tool: hooks / steps
+    after_agent: hooks / steps
+
+  这样能兼顾两点：
+
+  1. Agent 的宏观运行过程清楚
+    - 生命周期还是显式的。
+    - 一眼能看懂 Agent 从输入到回复经历了哪些阶段。
+  2. 关键执行点有足够控制力
+    - 模型调用、工具调用这种有成本、有风险、有失败可能的地方，用 middleware
+  包住。
+    - 记忆、技能、压缩、持久化这种阶段性能力，用 hook / step 挂载。
+
+  ---
+  6. 我对 L-Agent 的具体倾向
+
+  如果只在 Hook 和 Middleware 之间选一个作为 L-Agent 的主抽象，我建议选：
+
+  ▎ Hook 为主，Middleware 为辅。
+
+  更准确地说：
+
+  Lifecycle Stage = Hook Container
+  Model Call / Tool Call = Middleware-wrapped Action
+
+  原因是 L-Agent 不是 Web 框架，不需要把所有事情都变成 request
+  middleware；它首先是一个 Agent 运行生命周期，应该让“阶段”成为一等公民。
+
+  所以可以形成这样的概念分层：
+
+  Agent
+  └── Lifecycle
+      ├── Stage
+      │   ├── Hooks / Steps
+      │   └── Action
+      │       └── Middleware Chain
+      └── RunContext
+
+  这会比 F-Agent 当前的 AgentLoop 更优雅：
+
+  - AgentLoop 不再亲自处理所有逻辑。
+  - 它只负责推进 lifecycle。
+  - 每个阶段挂什么能力由配置决定。
+  - 模型调用和工具调用仍有强控制边界。
+  - 未来扩展 MCP、子 Agent、任务系统、不同模型供应商时，不需要继续膨胀主循环。
+
+  我的建议是：L-Agent 设计里不要把 Hook 和 Middleware 
+  对立起来，而是明确它们的职责边界。Hook 表达生命周期扩展点，Middleware 
+  表达对核心动作的控制链。
+
+✻ Crunched for 48s
+
+※ recap: We’re designing L-Agent as an F-Agent 2.0 refactor with a lifecycle-first architecture. Next, choose the plug-in model: likely lifecycle hooks/steps for stages, with middleware only around model/tool calls. (disable recaps in /config)
+
+❯ 可以                                                                          
+
+⏺ 好，那我们先定一个关键设计原则：
+
+  ▎ L-Agent 用显式生命周期阶段承载可插拔能力；普通能力用 Hook / Step 
+  ▎ 挂载，核心动作用 Middleware 包裹。
+
+  下一个问题：在 L-Agent 里，你希望 Hook 和 Step 怎么区分？
+
+  A. 不区分，统一叫 Hook：简单，所有阶段扩展都是 hook。
+  B. 不区分，统一叫 Step：更工程化，每个阶段就是一组可配置 step。
+  C. 区分两者：Step 是主流程的一部分，Hook 是旁路观察或轻量增强。
+  D. 先统一，后续需要再拆：第一版只保留一个概念，避免过度设计。
+
+✻ Churned for 19s
+
+❯ Hook对应阶段，比如before model、after agent等；step对应阶段里的步骤，比如上下 
+  文装配、记忆持久化等；一个hook阶段包含多个步骤step                            
+
+⏺ 这个定义很好，而且很适合 L-Agent：
+
+  Lifecycle
+  └── Hook Phase（阶段）
+      └── Steps（阶段内步骤）
+
+  也就是：
+
+  - before_model 是一个 Hook Phase
+  - context_assembly、memory_prefetch、skill_index_inject 是这个 phase 里的 Step
+  - Hook 负责表达“Agent 运行到了哪个生命周期点”
+  - Step 负责表达“这个生命周期点具体做哪些可配置动作”
+
+  这样比“所有都叫 hook”更清楚，也比一上来引入复杂 middleware 更稳。
+
+  下一个关键问题：你希望 RunContext 在 L-Agent 里扮演什么角色？
+
+  A. 全局可变上下文：所有 step 读写同一个 RunContext，简单直接，类似 Agent
+  运行时黑板。
+  B. 结构化状态容器：RunContext 分区管理
+  input/session/messages/workspace/tools/result/errors，更规范。
+  C. 不可变状态流：每个 step 输入旧 context，返回新 context，最清晰但实现更重。
+  D. 双层结构：外层 RunContext 稳定，内部关键字段如 messages、artifacts、events
+  由专门对象管理。
+
+✻ Crunched for 13s
+
+❯ A                                                                             
+
+⏺ 好，RunContext 采用 全局可变上下文 / 运行时黑板：
+
+  RunContext
+  ├── input              # 原始用户输入、增强输入
+  ├── session            # session_id、turn_count、历史消息
+  ├── messages           # 当前要发给模型的消息列表
+  ├── model              # 模型响应、token usage、finish_reason
+  ├── tools              # tool_calls、tool_results
+  ├── workspace          # 配置、路径、记忆文件、技能目录
+  ├── state              # 预算、压缩状态、临时标记
+  ├── result             # 最终回复
+  └── errors/events      # 错误、生命周期事件、审计记录
+
+  这会让第一版 L-Agent 更容易从 F-Agent 演进：先把 AgentLoop
+  里的局部变量和成员状态收拢进 RunContext，再逐步把逻辑拆成 phase + step。
+
+  下一个问题：你希望 L-Agent 的 Step 配置粒度 是哪种？
+
+  A. 代码注册为主：Python 里注册 step，配置只控制开关和顺序。
+  B. YAML 配置为主：生命周期、phase、step、middleware 都尽量由 YAML 声明。
+  C. 内置默认 + YAML 覆盖：代码提供默认生命周期，YAML
+  只覆盖启用、禁用、排序和参数。
+  D. 完全插件化：step 以独立包/模块发现，配置只声明加载哪些插件。
+
+✻ Crunched for 13s
+
+❯ 对比这几种的区别                                                              
+
+⏺ 这四种其实是在回答一个问题：
+
+  ▎ L-Agent 的运行流程到底由“代码”定义，还是由“配置”定义？
+
+  从保守到激进大概是：
+
+  A 代码注册为主
+  → C 内置默认 + YAML 覆盖
+  → B YAML 配置为主
+  → D 完全插件化
+
+  ---
+  A. 代码注册为主
+
+  形态
+
+  生命周期和 step 主要写在 Python 里：
+
+  lifecycle.register("before_model", MemoryPrefetchStep())
+  lifecycle.register("before_model", ContextAssemblyStep())
+  lifecycle.register("after_agent", MemorySyncStep())
+
+  配置文件只负责开关和参数：
+
+  memory:
+    enabled: true
+    prefetch_limit: 5
+
+  优点
+
+  - 实现最简单
+  - 类型、依赖、调用关系更清楚
+  - IDE 友好，容易跳转和测试
+  - 不容易因为配置写错导致运行流程异常
+  - 适合从 F-Agent 平滑重构到 L-Agent
+
+  缺点
+
+  - 可插拔感不够强
+  - 用户想调整生命周期顺序，需要改代码
+  - “Agent 运行流程”不够显式地暴露在配置层
+  - 不够符合你说的“各环节可插拔、可扩展的灵活配置”
+
+  适合场景
+
+  如果 L-Agent 只是 F-Agent 内部重构，A 足够；但如果你希望 L-Agent
+  的设计表达更优雅，A 有点偏保守。
+
+  ---
+  B. YAML 配置为主
+
+  形态
+
+  生命周期主要由 YAML 声明：
+
+  lifecycle:
+    before_agent:
+      - session.ensure_started
+      - input.normalize
+
+    before_model:
+      - memory.prefetch
+      - context.assemble
+      - skills.inject_index
+      - context.compress_if_needed
+
+    model_call:
+      action: llm.openai_chat
+      middleware:
+        - budget
+        - timeout
+        - tracing
+
+    after_agent:
+      - memory.sync
+      - session.persist_result
+
+  代码只提供 step 实现和 registry。
+
+  优点
+
+  - 运行结构非常显式
+  - 非常符合 “lifecycle-first”
+  - phase、step、middleware 都可配置
+  - 用户可以不用改代码就调整 Agent 行为
+  - 很适合未来做不同 Agent profile：
+    - coding agent
+    - research agent
+    - safe agent
+    - lightweight agent
+
+  缺点
+
+  - 实现复杂度明显上升
+  - 需要 step registry、依赖校验、参数 schema、错误提示
+  - 配置会成为另一个“编程语言”
+  - YAML 顺序、依赖、禁用项可能导致难排查的问题
+  - 第一版容易过度设计
+
+  适合场景
+
+  适合 L-Agent 已经稳定后，想把它做成高度可定制 Agent
+  内核。但如果一开始就这么做，风险是把重构变成框架工程。
+
+  ---
+  C. 内置默认 + YAML 覆盖
+
+  形态
+
+  代码里有一套默认生命周期：
+
+  DEFAULT_LIFECYCLE = {
+      "before_agent": [
+          "session.ensure_started",
+          "input.prepare",
+      ],
+      "before_model": [
+          "memory.prefetch",
+          "context.assemble",
+          "skills.inject_index",
+      ],
+      "model_call": [
+          "llm.call",
+      ],
+      "after_model": [
+          "session.persist_assistant",
+          "tool.parse_calls",
+      ],
+      "tool_call": [
+          "tools.dispatch",
+      ],
+      "after_tool": [
+          "session.persist_tool_results",
+          "context.maybe_compress",
+      ],
+      "after_agent": [
+          "memory.sync",
+          "session.commit",
+      ],
+  }
+
+  YAML 只做覆盖：
+
+  lifecycle:
+    before_model:
+      disable:
+        - skills.inject_index
+      insert_after:
+        memory.prefetch:
+          - workspace.inject_guidance
+
+  steps:
+    memory.prefetch:
+      prefetch_limit: 8
+
+  或者第一版更简单：
+
+  lifecycle:
+    before_model:
+      steps:
+        - memory.prefetch
+        - context.assemble
+        - skills.inject_index
+
+  优点
+
+  - 兼顾稳定和灵活
+  - 默认能跑，不需要用户理解全部配置
+  - Agent 结构可以显式展示
+  - 用户只在需要时覆盖部分阶段
+  - 适合从 F-Agent 演进，不必一次性框架化
+  - 后续可以逐步增强配置能力
+
+  缺点
+
+  - 需要设计“默认值 + 覆盖”的合并规则
+  - 如果覆盖语义太复杂，也会变难懂
+  - 要处理默认 step 被禁用后依赖缺失的问题
+  - 配置能力不如 B 彻底
+
+  适合场景
+
+  最适合 L-Agent 当前目标：F-Agent 2.0 重构版，同时追求更清晰、更可插拔的 Agent 
+  运行抽象。
+
+  它避免了 A 的保守，也避免了 B/D 的过度平台化。
+
+  ---
+  D. 完全插件化
+
+  形态
+
+  step、tool、memory、skill、middleware 都可以作为插件被发现和加载：
+
+  plugins:
+    - l_agent_builtin.memory
+    - l_agent_builtin.skills
+    - l_agent_mcp
+    - my_custom_coding_steps
+
+  lifecycle:
+    before_model:
+      - memory.prefetch
+      - mcp.inject_tools
+
+  插件自己声明：
+
+  class MemoryPlugin:
+      def register(self, registry):
+          registry.step("memory.prefetch", MemoryPrefetchStep)
+          registry.step("memory.sync", MemorySyncStep)
+
+  优点
+
+  - 扩展性最强
+  - 很适合生态化、第三方扩展、多 Agent profile
+  - MCP、ACP、不同工具后端、不同 memory provider 都可以独立接入
+  - 核心内核可以保持很薄
+
+  缺点
+
+  - 第一版复杂度最高
+  - 插件生命周期、版本兼容、依赖冲突、加载失败都要处理
+  - 安全边界更难设计
+  - 调试复杂
+  - 容易偏离 “F-Agent 2.0 重构” 变成 “Agent Framework”
+
+  适合场景
+
+  适合作为 L-Agent 的长期方向，不适合作为第一版主线。
+
+  ---
+  横向对比
+
+  方案: A 代码注册为主
+  灵活性: 低
+  稳定性: 高
+  实现复杂度: 低
+  配置可见性: 低
+  适合第一版: 中
+  风险: 抽象不够外显
+  ────────────────────────────────────────
+  方案: B YAML 配置为主
+  灵活性: 高
+  稳定性: 中
+  实现复杂度: 高
+  配置可见性: 高
+  适合第一版: 中低
+  风险: 配置变复杂框架
+  ────────────────────────────────────────
+  方案: C 默认 + YAML 覆盖
+  灵活性: 中高
+  稳定性: 高
+  实现复杂度: 中
+  配置可见性: 中高
+  适合第一版: 高
+  风险: 合并规则需克制
+  ────────────────────────────────────────
+  方案: D 完全插件化
+  灵活性: 最高
+  稳定性: 中低
+  实现复杂度: 最高
+  配置可见性: 高
+  适合第一版: 低
+  风险: 过早平台化
+
+  ---
+  我建议 L-Agent 选 C
+
+  我建议第一版采用：
+
+  ▎ 内置默认生命周期 + YAML 覆盖。
+
+  原因是 L-Agent 现在不是从零做框架，而是从 F-Agent
+  演进。你需要一个能落地的中间态：
+
+  F-Agent 的硬编码主循环
+          ↓
+  L-Agent 的默认生命周期
+          ↓
+  用户通过 YAML 调整 phase / step / middleware
+          ↓
+  未来再演进到插件化
+
+  这样设计最稳：
+
+  1. 默认 Agent 开箱即用
+    - 不配置也能跑。
+    - 不会变成“先写一堆 YAML 才能启动”。
+  2. 生命周期结构变得显式
+    - 可以把默认生命周期打印出来、文档化、测试化。
+    - 用户能看到 Agent 到底经过哪些 phase 和 step。
+  3. 可插拔能力逐步释放
+    - 第一版支持启用 / 禁用 / 改参数 / 简单排序。
+    - 第二版再支持 insert_before / insert_after。
+    - 第三版再支持外部插件 step。
+  4. 不会过早框架化
+    - D 很诱人，但会让你被插件系统、依赖系统、安全系统拖住。
+    - C 可以先把 Agent 抽象打清楚。
+
+  ---
+  推荐的演进分层
+
+  我建议 L-Agent 的配置能力分三层推进：
+
+  第一层：内置默认
+
+  DEFAULT_LIFECYCLE
+  DEFAULT_STEPS
+  DEFAULT_MIDDLEWARE
+
+  这是系统可信的最小闭环。
+
+  第二层：YAML 覆盖
+
+  支持：
+
+  lifecycle:
+    before_model:
+      steps:
+        - memory.prefetch
+        - context.assemble
+        - skills.inject_index
+
+  以及 step 参数：
+
+  steps:
+    memory.prefetch:
+      enabled: true
+      limit: 5
+
+  第三层：插件扩展
+
+  后续再引入：
+
+  plugins:
+    - l_agent_mcp
+    - l_agent_custom_memory
+
+  插件只负责注册新的 step / tool / middleware，不改变 lifecycle 主模型。
+
+  ---
+  所以我的建议是：
+
+  ▎ L-Agent 第一版不要做纯 YAML 
+  ▎ 驱动，也不要直接完全插件化；采用“代码内置默认生命周期，YAML 
+  ▎ 做覆盖与调参”的方式。
+
+  这样最符合你当前选定的方向：F-Agent 2.0 重构版 + lifecycle-first + 
+  可插拔运行环节。
+
+✻ Sautéed for 44s
+
+❯ 选A，我说的“各环节可插拔、可扩展的灵活配置”，指的是各个生命周期Hook内的step可 
+  插拔、可扩展，而不是生命周期可扩展，生命周期是固定的，不需要调整的            
+
+⏺ 明白，这个修正很关键：
+
+  ▎ L-Agent 的生命周期 Hook 是固定骨架，不作为配置扩展点；可插拔、可扩展的是每个
+  ▎  Hook 内部的 Step。
+
+  也就是说：
+
+  固定生命周期：
+  before_agent
+  before_model
+  model_call
+  after_model
+  tool_call
+  after_tool
+  after_agent
+
+  可配置部分：
+  每个 Hook Phase 内部有哪些 Step、Step 是否启用、Step 参数是什么、Step
+  顺序如何。
+
+  这比“生命周期也可配置”更优雅，因为它保留了 Agent 的稳定心智模型：
+
+  - Hook 是 Agent 的运行语义，不轻易变化。
+  - Step 是能力模块，可以注册、替换、关闭、重排。
+  - Middleware 只用于包裹 model_call / tool_call 这种核心动作。
+  - YAML 如果存在，也只服务于 step 的开关、参数、局部排序，而不是重写生命周期。
+
+  所以你选的其实是：
+
+  ▎ 固定 Lifecycle + 代码注册 Step + 配置控制 Step 行为。
+
+  下一个问题：你希望 Step 的接口契约更偏哪种？
+
+  A. 极简函数式
+  每个 step 就是：
+
+  def run(ctx: RunContext) -> None:
+      ...
+
+  简单、直接、适合第一版。
+
+  B. 类接口式
+  每个 step 是类：
+
+  class MemoryPrefetchStep:
+      name = "memory.prefetch"
+      phase = "before_model"
+
+      def run(self, ctx: RunContext) -> None:
+          ...
+
+  更清晰，适合注册、配置、测试。
+
+  C. 声明式 StepSpec + 执行器
+  Step 有 name、phase、depends_on、config_schema、enabled、run
+  等完整元信息。更规范，但更像框架。
+
+  D. 先 B，保留 C 的扩展空间
+  第一版用类接口，字段保持克制，只放 name / phase / run，后续再加
+  depends_on、schema、priority。
+
+✻ Cooked for 17s
+
+❯ B                                                                             
+
+⏺ 好，Step 采用 类接口式，这比纯函数更适合 L-Agent 的“可注册能力模块”定位。
+
+  初步契约可以是：
+
+  class Step:
+      name: str
+      phase: HookPhase
+
+      def run(self, ctx: RunContext) -> None:
+          ...
+
+  例如：
+
+  class MemoryPrefetchStep:
+      name = "memory.prefetch"
+      phase = "before_model"
+
+      def run(self, ctx: RunContext) -> None:
+          ctx.memory_context = ctx.memory_manager.prefetch(ctx.input.original)
+
+  这带来几个好处：
+
+  - Step 自带身份：name
+  - Step 自带归属阶段：phase
+  - Step 的测试天然聚焦：构造 RunContext，运行 step，断言 ctx 变化
+  - Step Registry 可以按 phase 收集 step
+  - 配置可以按 step name 做启用、参数和顺序控制
+
+  下一个问题：model_call 和 tool_call
+  在七段式生命周期里比较特殊，它们是“核心动作阶段”。你希望它们内部也由 Step
+  组成，还是保留为固定 Action + Middleware？
+
+  A. 也作为普通 Hook Phase，内部是 Step
+  model_call:
+    - llm.call
+  tool_call:
+    - tools.dispatch
+
+  B. 作为固定 Action + Middleware
+  model_call = middleware_chain(llm.call)
+  tool_call = middleware_chain(tool.dispatch)
+
+  C. 双层：Phase 内只有一个核心 Action Step，但这个 Step 内部可被 middleware 
+  包裹
+  model_call phase:
+    - model.call step
+      middleware: budget, timeout, tracing
+
+  D. 第一版不引入 Middleware，全部 Step 化
+  用 budget.step → model.call.step → usage.persist.step 这种方式实现。
+
+✻ Crunched for 18s
+
+❯ B                                                                             
+
+⏺ 好，model_call / tool_call 定为 固定 Action + Middleware，不把它们普通 Step
+  化。
+
+  于是 L-Agent 的宏观结构更清晰了：
+
+  Lifecycle 固定七段：
+  1. before_agent   -> Step[]
+  2. before_model   -> Step[]
+  3. model_call     -> Action + Middleware[]
+  4. after_model    -> Step[]
+  5. tool_call      -> Action + Middleware[]
+  6. after_tool     -> Step[]
+  7. after_agent    -> Step[]
+
+  它的语义是：
+
+  - Hook Phase：生命周期阶段，固定，不扩展。
+  - Step：挂在 Hook Phase 内的能力模块，可注册、启停、调参、排序。
+  - Action：阶段中的核心不可缺省动作，例如 LLM 调用、工具调度。
+  - Middleware：只包裹 Action，用来做预算、超时、审批、审计、截断等控制。
+
+  下一个问题：关于 tool_call，你希望工具调度继续保持 F-Agent 的
+  串行顺序执行，还是 L-Agent 第一版就引入并行安全标记？
+
+  A. 继续全串行：最简单、安全，贴合 F-Agent。
+  B. 支持 parallel_safe 标记：工具声明可并行，调度器按安全分组并发执行。
+  C. 只为只读工具并行：read_file、web_fetch、web_search
+  之类可并行，写文件/终端/数据库串行。
+  D. 暂不做执行并行，但在 ToolSpec 里预留 parallel_safe 字段。
+
+✻ Churned for 10s
+
+❯ A                                                                             
+⏺ 好，tool_call 第一版继续 全串行顺序执行。
+
+  这也符合 L-Agent 作为 F-Agent 2.0
+  的定位：先优化抽象和边界，不急着引入并行调度带来的安全、顺序、持久化复杂度。
+
+  当前核心概念已经基本成型：
+
+  Agent = 固定 Lifecycle + 可插拔 Step + 受控 Action
+
+  Lifecycle:
+    before_agent   -> Step[]
+    before_model   -> Step[]
+    model_call     -> Middleware(Action)
+    after_model    -> Step[]
+    tool_call      -> Middleware(Action)  # 串行工具调度
+    after_tool     -> Step[]
+    after_agent    -> Step[]
+
+  RunContext:
+    全局可变运行上下文
+
+  下一个问题：L-Agent 第一版里，你希望 Memory / Skill / Context / Session 
+  Persistence 这些能力怎么分布到阶段里？我建议用下面这个默认映射，你看是否认同：
+
+  before_agent:
+    - session.ensure_started
+    - input.prepare
+
+  before_model:
+    - memory.prefetch
+    - context.inject_memory
+    - skills.inject_index
+    - context.check_compression
+
+  model_call:
+    - llm.call  # middleware: budget, timeout, tracing
+
+  after_model:
+    - session.persist_assistant
+    - usage.update
+    - tool.extract_calls
+
+  tool_call:
+    - tools.dispatch_serial  # middleware: approval, audit, result_limit
+
+  after_tool:
+    - session.persist_tool_results
+    - context.append_tool_results
+    - context.check_compression
+
+  after_agent:
+    - session.persist_final
+    - memory.sync
+    - run.cleanup
+
+✻ Cogitated for 11s
+
+※ recap: 我们正在设计 L-Agent 作为 F-Agent 2.0：固定七段生命周期，Hook 内挂可插拔 Step，model/tool call 用 Action+Middleware，工具先串行。下一步是确认各能力在生命周期阶段里的默认分布。
+
+❯ 我不认同，这个地方需要重点讨论，首先我们先对齐一个问题：                      
+  session、agent-run、react这三者之间的关系是什么                               
+
+⏺ 你这个问题应该先于阶段分配讨论，我刚才把能力直接塞阶段里有点太快了。
+
+  我建议三者这样定义：
+
+  Session  >  AgentRun  >  ReActIteration
+
+  1. Session：长期会话容器
+
+  Session 是用户可感知的连续对话 / 工作上下文。
+
+  它关心的是：
+
+  - 这是哪一次会话
+  - 历史消息是什么
+  - 当前会话标题、统计、压缩状态是什么
+  - 如何恢复上下文
+  - 多轮 AgentRun 的结果如何沉淀
+
+  Session 本身不执行推理，也不调用工具。它是 持久化边界 / 恢复边界 / 
+  对话连续性边界。
+
+  可以理解为：
+
+  一个 Session 包含多次用户输入，也就包含多次 AgentRun。
+
+  ---
+  2. AgentRun：一次 Agent 运行事务
+
+  AgentRun 是 Agent 响应一次输入的完整运行过程。
+
+  这个输入可以来自：
+
+  - 用户在 CLI 输入的一句话
+  - 定时任务触发的 prompt
+  - 未来子 Agent 接收到的任务
+  - 未来外部平台传入的消息
+
+  AgentRun 关心的是：
+
+  - 本次输入是什么
+  - 本次运行属于哪个 session
+  - 本次运行的 RunContext 是什么
+  - 本次运行用了多少预算
+  - 本次运行产生了哪些模型响应、工具调用、最终回复、错误、事件
+  - 本次运行结束后如何提交到 session
+
+  所以 AgentRun 是 执行边界 / 生命周期边界 / 临时状态边界。
+
+  L-Agent 的七段生命周期，严格来说应该属于 AgentRun：
+
+  AgentRun Lifecycle:
+  before_agent
+  before_model
+  model_call
+  after_model
+  tool_call
+  after_tool
+  after_agent
+
+  其中 RunContext 也是一次 AgentRun 的上下文黑板，而不是整个 Session 的上下文。
+
+  ---
+  3. ReAct：AgentRun 内部的推理-行动循环策略
+
+  ReAct 不是 Session，也不是 AgentRun；它是 AgentRun 内部采用的一种执行策略。
+
+  它描述的是：
+
+  模型思考 / 决策
+    → 如果需要工具，就行动
+    → 工具结果回到上下文
+    → 再次模型决策
+    → 直到得到最终回复
+
+  所以 ReAct 更像：
+
+  AgentRun 内部的 loop strategy
+
+  一个 AgentRun 里面可能有多轮 ReAct iteration：
+
+  AgentRun
+  ├── ReActIteration 1
+  │   ├── model_call
+  │   ├── after_model
+  │   ├── tool_call
+  │   └── after_tool
+  ├── ReActIteration 2
+  │   ├── model_call
+  │   ├── after_model
+  │   ├── tool_call
+  │   └── after_tool
+  └── Final response
+
+  如果模型第一轮就直接回答，没有工具调用，那么这个 AgentRun 仍然有
+  ReAct，只是只有一次 model decision，没有 act。
+
+  ---
+  我建议的关系定义
+
+  Session
+  └── AgentRun*
+      └── ReActIteration*
+
+  更准确地说：
+
+  概念: Session
+  本质: 连续对话容器
+  生命周期: 跨多轮输入
+  是否持久化: 是
+  典型数量关系: 1 个 Session 有 N 个 AgentRun
+  ────────────────────────────────────────
+  概念: AgentRun
+  本质: 一次输入到一次输出的运行事务
+  生命周期: 单次输入期间
+  是否持久化: 可记录 run 级事件
+  典型数量关系: 1 个 AgentRun 有 N 个 ReActIteration
+  ────────────────────────────────────────
+  概念: ReAct
+  本质: AgentRun 内部的决策-行动循环
+  生命周期: 单次运行内部
+  是否持久化: 可记录 iteration / tool call
+  典型数量关系: 1 次 ReActIteration 包含 1 次模型决策和可选工具行动
+
+  ---
+  对 L-Agent 的关键影响
+
+  这意味着生命周期不应该直接理解成“整个 Session 的生命周期”，而应该理解成：
+
+  ▎ 一次 AgentRun 的生命周期。
+
+  但七段式里需要区分两类阶段：
+
+  Run 外层阶段
+
+  before_agent
+  after_agent
+
+  它们只在一次 AgentRun 开始和结束时各执行一次。
+
+  ReAct 内层阶段
+
+  before_model
+  model_call
+  after_model
+  tool_call
+  after_tool
+
+  它们可能在一次 AgentRun 中重复多次。
+
+  所以完整结构应该是：
+
+  Session
+  └── AgentRun
+      ├── before_agent
+      ├── while budget.can_continue:
+      │   ├── before_model
+      │   ├── model_call
+      │   ├── after_model
+      │   ├── if has_tool_calls:
+      │   │   ├── tool_call
+      │   │   └── after_tool
+      │   └── else final
+      └── after_agent
+
+  这也解释了为什么刚才那个阶段分配需要重新讨论：有些能力是 run 级别，有些是
+  iteration 级别，不能混放。
+
+✻ Crunched for 34s
+
+❯ 是的，现在你的认识与我一致，我们可以讨论各阶段的step分布了                    
+
+⏺ 很好，现在基础关系可以作为 L-Agent 的核心语义：
+
+  Session
+  └── AgentRun
+      ├── before_agent      # run 级，只执行一次
+      ├── ReActIteration*
+      │   ├── before_model  # iteration 级
+      │   ├── model_call
+      │   ├── after_model
+      │   ├── tool_call?    # 有工具调用才进入
+      │   └── after_tool?
+      └── after_agent       # run 级，只执行一次
+
+  我建议分布 Step 时遵循一个原则：
+
+  ▎ Session 负责连续性，AgentRun 负责一次事务，ReActIteration 
+  ▎ 负责模型-工具循环。Step 必须挂到它真正影响的生命周期层级上。
+
+  我先给一个修正版默认分布，作为讨论起点：
+
+  before_agent  # AgentRun 开始，run 级
+    - run.initialize_context
+    - session.ensure_active
+    - session.restore_messages
+    - input.record_user_message
+    - budget.initialize
+    - run.emit_started_event
+
+  before_model  # 每轮 ReActIteration 前
+    - iteration.initialize
+    - memory.prefetch
+    - context.assemble_model_input
+    - skills.inject_index
+    - context.apply_fence
+    - context.ensure_budget
+
+  model_call  # 固定 Action + Middleware
+    action:
+      - llm.call
+    middleware:
+      - model.budget_guard
+      - model.timeout
+      - model.usage_trace
+
+  after_model  # 每轮模型返回后
+    - model.capture_response
+    - session.persist_assistant_message
+    - usage.update
+    - tool.extract_calls
+    - result.detect_final_answer
+
+  tool_call  # 有 tool_calls 时才进入，固定 Action + Middleware
+    action:
+      - tools.dispatch_serial
+    middleware:
+      - tool.approval_guard
+      - tool.audit_trace
+      - tool.result_limit
+
+  after_tool  # 工具执行后
+    - tool.capture_results
+    - session.persist_tool_results
+    - context.append_tool_results
+    - context.maybe_compress
+
+  after_agent  # AgentRun 结束，run 级
+    - result.persist_final
+    - memory.sync
+    - session.update_stats
+    - run.emit_finished_event
+    - run.cleanup
+
+  但这里有几个可争议点，需要逐个对齐。第一个我想先问：
+
+  用户原始消息的持久化应该放在哪个阶段？
+
+  A. before_agent：AgentRun 一开始就记录原始输入，符合“run 开始即入库”。
+  B. after_agent：等本次运行成功结束后再整体提交，符合“事务完整性”。
+  C. Session 层独立处理：用户输入进入 Session 后先持久化，然后 AgentRun 只读取。
+  D. before_agent 记录 run 输入，after_agent 再补 run 
+  结果：拆成输入记录和结果提交两个动作。
+
+✻ Cooked for 32s
+
+※ recap: 我们在设计 L-Agent：固定生命周期 Hook，Hook 内 Step 可插拔；Session > AgentRun > ReActIteration 已对齐。下一步讨论各阶段 Step 分布，先决定用户原始消息持久化放在哪个阶段。
+
+❯ 为了更好的处理持久化与恢复回退，我觉得我们还需要设计检查点机制，你觉得呢      
+
+⏺ 我非常认同，而且检查点机制应该成为 L-Agent 区分 Session / AgentRun / 
+  ReActIteration 后的关键基础设施。
+
+  如果没有 checkpoint，持久化会变成“到处 append
+  message”；一旦模型调用失败、工具执行中断、压缩失败、CLI 退出，就很难判断：
+
+  - 本次 AgentRun 走到了哪里
+  - 哪些消息已经可信提交
+  - 哪些只是运行中临时状态
+  - 恢复时应该继续、回滚，还是标记失败
+  - tool_call 执行了一半时是否允许重放
+
+  我建议把 checkpoint 设计成：
+
+  ▎ AgentRun 
+  ▎ 生命周期上的状态提交点，用来记录运行进度、可恢复状态和已提交副作用。
+
+  初步可以分三层：
+
+  Session checkpoint      # 会话级：当前活跃 session、消息游标、压缩摘要状态
+  AgentRun checkpoint     # run 级：本次输入、状态、当前
+  phase、最终结果/失败原因
+  Iteration checkpoint    # ReAct 级：第几轮、模型响应、工具调用、工具结果
+
+  但第一版不一定要做很复杂。可以先设计成 AgentRun 内部的统一记录：
+
+  Checkpoint
+  ├── session_id
+  ├── run_id
+  ├── iteration_index
+  ├── phase
+  ├── status: started | completed | failed | interrupted
+  ├── committed_message_ids
+  ├── pending_tool_calls
+  ├── completed_tool_call_ids
+  ├── context_snapshot_ref?
+  ├── error?
+  ├── created_at
+  └── updated_at
+
+  它和生命周期的关系可以是：
+
+  before_agent
+    checkpoint(run_started)
+
+  before_model
+    checkpoint(iteration_started)
+
+  model_call
+    checkpoint(model_call_started)
+    checkpoint(model_call_completed)
+
+  after_model
+    checkpoint(model_response_committed)
+
+  tool_call
+    checkpoint(tool_call_started)
+    checkpoint(tool_call_completed)
+
+  after_tool
+    checkpoint(tool_results_committed)
+
+  after_agent
+    checkpoint(run_completed)
+
+  这样持久化策略就能更清晰：
+
+  - 消息持久化：记录事实产物，比如 user message、assistant message、tool
+  result。
+  - Checkpoint：记录运行进度和恢复点。
+  - RunContext：运行时黑板，不保证全部持久化。
+  - Session：长期会话视图，由已提交消息和状态恢复出来。
+
+  我建议这里引入一个重要区分：
+
+  Commit 和 Checkpoint 不完全一样
+
+  Commit 是把业务产物写入长期状态。
+
+  例如：
+
+  - user message 入库
+  - assistant response 入库
+  - tool result 入库
+  - final result 入库
+  - memory sync 写入文件
+
+  Checkpoint 是记录“运行到哪里了”。
+
+  例如：
+
+  - run started
+  - iteration 2 model_call started
+  - tool call abc completed
+  - after_tool completed
+  - run interrupted
+
+  所以一个阶段里可能同时有：
+
+  session.persist_assistant_message  # commit
+  checkpoint.mark("model_response_committed")  # checkpoint
+
+  ---
+  我的建议是：必须设计 checkpoint，但第一版不要把它做成复杂事务系统。
+
+  第一版目标：
+
+  1. 每个 AgentRun 有 run_id
+  2. 每个 ReAct iteration 有 iteration_index
+  3. 每个关键 phase 结束后写 checkpoint
+  4. 恢复时能判断上一次 run 是：
+    - completed：正常恢复 session
+    - failed/interrupted：提示用户，并可选择继续新 run 或查看失败点
+  5. 不自动重放危险 tool_call
+  6. 对已完成 tool_result 不重复执行，只恢复为历史消息
+
+  这样既能支持恢复回退，又不会把 L-Agent 第一版拖进 workflow engine。
+
+  我建议接下来我们先对齐一个问题：
+
+  Checkpoint 的主要目标是“恢复可见性”，还是“自动续跑”？
+
+  A. 恢复可见性优先：能知道上次断在哪、已提交什么，但默认不自动续跑。
+  B. 自动续跑优先：断点后尽量继续执行，包括继续未完成的 ReAct。
+  C. 回滚优先：失败后尽量撤销本次 AgentRun 的未完成提交。
+  D. 分级策略：模型阶段可续跑，工具阶段默认不续跑，最终由用户确认。
+
+✻ Crunched for 23s
+
+❯ 我提出引入checkpoint机制的目的是实现类似claudecode的resume和rewind功能        
+
+⏺ 明白，那 checkpoint 的目标就不是单纯“故障恢复”，而是支撑两个用户能力：
+
+  resume：从历史会话 / 历史运行点继续
+  rewind：回退到某个历史点，然后从那里开新分支继续
+
+  这会改变 checkpoint 的设计重点。
+
+  关键区别
+
+  如果只是崩溃恢复，checkpoint 记录“运行到哪里”就够了。
+
+  但如果要实现 Claude Code 类似的 resume / rewind，checkpoint 还要成为：
+
+  ▎ 会话时间线上的可恢复快照点。
+
+  它不仅记录 phase，还要能回答：
+
+  - 回到这个点时，模型上下文应该是什么？
+  - 哪些 messages 属于这个点之前？
+  - 压缩摘要状态是什么？
+  - memory / skill / workspace 指引是否重新读取还是使用当时快照？
+  - 回退后新输入是覆盖旧分支，还是创建分支？
+  - 回退点之后的消息、tool call、memory sync 是否还保留可查看？
+
+  ---
+  我建议的概念拆分
+
+  为了避免 checkpoint 承担太多职责，可以区分两个概念：
+
+  Checkpoint
+    运行检查点：记录 AgentRun / ReActIteration 到了哪个阶段
+
+  Snapshot
+    会话快照点：记录可 resume / rewind 的上下文边界
+
+  但第一版可以在数据模型上合并，语义上区分：
+
+  Checkpoint.kind:
+    - runtime       # phase 级运行恢复
+    - snapshot      # 用户可见 resume / rewind 点
+
+  ---
+  resume / rewind 需要的 checkpoint
+
+  1. Resume
+
+  Resume 的目标是：
+
+  ▎ 选择一个 session，恢复到最近稳定状态继续对话。
+
+  它通常只需要 稳定 checkpoint，例如：
+
+  run_completed
+  tool_results_committed
+  model_response_committed
+  context_compressed
+
+  Resume 不应该恢复到：
+
+  model_call_started
+  tool_call_started
+
+  因为这些点处于不完整执行中。
+
+  所以 checkpoint 需要标记：
+
+  stable: true | false
+
+  2. Rewind
+
+  Rewind 的目标是：
+
+  ▎ 回到某个历史消息 / run / checkpoint 
+  ▎ 之前，丢弃或隐藏之后的上下文，然后从那里继续。
+
+  Rewind 需要更精确地知道：
+
+  checkpoint_id
+  session_id
+  parent_checkpoint_id
+  message_cursor
+  summary_state
+  run_id
+  iteration_index
+  created_at
+  label
+
+  其中最关键的是：
+
+  message_cursor
+
+  也就是恢复模型上下文时，只取：
+
+  messages where message.sequence <= checkpoint.message_cursor
+
+  这样 rewind 不需要真的删除后续消息。可以：
+
+  - 保留原历史
+  - 创建新分支
+  - 新 run 从 checkpoint 开始
+  - 后续消息属于新的 branch
+
+  这比硬删除安全得多。
+
+  ---
+  我建议 L-Agent 采用时间线 + 分支模型
+
+  Session
+  └── Timeline
+      ├── Checkpoint 1
+      ├── Checkpoint 2
+      ├── Checkpoint 3
+      ├── Rewind to Checkpoint 2
+      └── New Branch from Checkpoint 2
+
+  数据上可以是：
+
+  sessions
+  messages
+  agent_runs
+  checkpoints
+
+  核心字段：
+
+  messages:
+    id
+    session_id
+    branch_id
+    sequence
+    role
+    content
+    run_id
+    iteration_index
+    created_at
+
+  checkpoints:
+    id
+    session_id
+    branch_id
+    run_id
+    kind
+    phase
+    stable
+    message_cursor
+    context_summary_id
+    parent_checkpoint_id
+    created_at
+
+  这样：
+
+  resume
+
+  resume(session_id)
+    → 找 active branch 最新 stable checkpoint
+    → 根据 message_cursor 恢复 messages
+    → 恢复 context summary / compressed state
+    → 等待用户继续输入
+
+  rewind
+
+  rewind(checkpoint_id)
+    → 找到 checkpoint 对应 message_cursor
+    → 创建 new branch，parent_checkpoint_id = checkpoint_id
+    → active branch 切到 new branch
+    → 根据 checkpoint 恢复 messages
+    → 等待用户继续输入
+
+  ---
+  和 AgentRun / ReAct 的关系
+
+  前面我们对齐的是：
+
+  Session
+  └── AgentRun
+      └── ReActIteration
+
+  加上 checkpoint 后，应该变成：
+
+  Session
+  └── Branch / Timeline
+      └── AgentRun
+          └── ReActIteration
+              └── Checkpoint*
+
+  不是每个 phase checkpoint 都适合用户 rewind。
+
+  我建议区分：
+
+  Runtime checkpoint
+
+  内部恢复用：
+
+  before_model_started
+  model_call_completed
+  tool_call_started
+  tool_call_completed
+
+  Snapshot checkpoint
+
+  用户 resume / rewind 用：
+
+  user_message_committed
+  assistant_message_committed
+  tool_results_committed
+  run_completed
+  context_compressed
+
+  ---
+  对阶段 step 分布的影响
+
+  这意味着持久化相关 step 不能只是简单地叫：
+
+  session.persist_assistant_message
+
+  而应该拆成：
+
+  message.commit_user
+  checkpoint.create_snapshot
+  run.mark_phase
+
+  例如：
+
+  before_agent:
+    - run.create
+    - message.commit_user
+    - checkpoint.snapshot_user_message
+
+  after_model:
+    - message.commit_assistant
+    - checkpoint.runtime_model_completed
+    - checkpoint.snapshot_assistant_message
+
+  after_tool:
+    - message.commit_tool_results
+    - checkpoint.snapshot_tool_results
+
+  after_agent:
+    - run.complete
+    - checkpoint.snapshot_run_completed
+
+  ---
+  设计原则建议
+
+  我建议 L-Agent 的 checkpoint 采用下面四条原则：
+
+  1. Checkpoint 不等于消息
+    - 消息是对话内容。
+    - checkpoint 是可恢复边界。
+  2. 用户可 rewind 的必须是 stable checkpoint
+    - 不允许 rewind 到半个 tool_call 中间。
+  3. rewind 不删除历史，创建新 branch
+    - 安全，符合开发工具心智。
+    - 后续可以展示分支历史。
+  4. resume 默认恢复 active branch 最新 stable checkpoint
+    - 不自动续跑未完成 tool。
+    - 如果上次 run interrupted，可以提示用户停在哪。
+
+  ---
+  我建议我们接下来先定一个核心选择：
+
+  L-Agent 的 rewind 是否采用“分支模型”？
+
+  A. 采用分支模型：rewind 后创建新
+  branch，旧历史保留，可查看但不再作为当前上下文。
+  B. 硬回退模型：rewind 后删除或隐藏 checkpoint 之后的消息，当前 session
+  回到过去。
+  C. 两者都支持：默认分支，用户可选择丢弃后续历史。
+  D. 第一版只做 resume，不做 rewind 分支：先保守实现。
+
+✻ Baked for 32s
+
+❯ 先不着急选择，这个地方有几个概念需要先对齐，保证我们两个的认知是一致的：      
+  1、session和branch的关系是什么，怎么实现创建新branch，创建新branch会做哪些操  
+  作                                                                            
+  2、你说的checkpoint是什么，为什么又分内部恢复和用户rewind这两种checkpoint，用 
+  于用户rewind的checkpoint我理解，而用于内部恢复的checkpoint的作用是什么我不知  
+  道                                                                            
+
+⏺ 对，这两个问题必须先对齐，不然后面会把 checkpoint、branch、message、run
+  混在一起。
+
+  1. Session 和 Branch 的关系
+
+  我建议这样定义：
+
+  ▎ Session 是一个会话容器，Branch 是这个 Session 内的一条上下文时间线。
+
+  也就是：
+
+  Session
+  └── Branch*
+      └── Message / AgentRun / Checkpoint*
+
+  Session 是什么
+
+  Session 表示用户可感知的一次长期对话，例如：
+
+  “L-Agent 设计讨论”
+
+  它保存的是会话级信息：
+
+  - session_id
+  - title
+  - created_at / updated_at
+  - active_branch_id
+  - 默认模型
+  - 会话统计
+  - 会话级配置快照，或者配置引用
+
+  Session 不直接代表一条线性历史。它更像一个 Git repository。
+
+  Branch 是什么
+
+  Branch 表示这个 session 里的某一条上下文历史线。
+
+  它保存的是：
+
+  - branch_id
+  - session_id
+  - parent_branch_id
+  - fork_checkpoint_id
+  - head_checkpoint_id
+  - created_at
+  - name / label
+  - status: active / archived
+
+  Branch 更像 Git branch。
+
+  一开始创建 session 时，会自动创建一个默认 branch：
+
+  session: L-Agent 设计讨论
+  └── branch: main
+
+  用户正常对话时，消息和 run 都追加到 main 上。
+
+  ---
+  创建新 Branch 是什么
+
+  创建新 branch 的本质是：
+
+  ▎ 从某个稳定 checkpoint 复制一条“上下文视图”，以后新的消息写到新 branch，而旧 
+  ▎ branch 保留不动。
+
+  注意：它不一定需要复制所有历史消息。
+
+  更合理的实现是 结构共享：
+
+  main:
+    msg1 → msg2 → msg3 → msg4
+
+  rewind 到 msg2 对应 checkpoint，创建 branch b2:
+
+  main:
+    msg1 → msg2 → msg3 → msg4
+
+  b2:
+    fork_checkpoint = msg2
+    新消息从 msg2 后开始追加
+
+  恢复 b2 上下文时：
+
+  读取 fork_checkpoint 之前 main 的消息
+  + 读取 b2 自己的新消息
+
+  也就是说，branch 不需要复制旧消息，只需要记录：
+
+  fork_checkpoint_id
+  parent_branch_id
+  base_message_cursor
+
+  创建新 branch 会做哪些操作
+
+  如果从 checkpoint C 创建新 branch，大概做：
+
+  create_branch(
+    session_id = C.session_id,
+    parent_branch_id = C.branch_id,
+    fork_checkpoint_id = C.id,
+    base_message_cursor = C.message_cursor,
+    head_checkpoint_id = C.id,
+  )
+
+  update_session.active_branch_id = new_branch_id
+
+  可选操作：
+
+  - 给新 branch 起名，例如 rewind-20260602-001
+  - 标记旧 branch 仍保留，但不再 active
+  - 记录一条 branch event：branch_created_from_checkpoint
+  - 恢复运行上下文时，只看到 checkpoint C 之前的历史
+
+  它 不会 做：
+
+  - 删除旧 branch 消息
+  - 复制所有旧消息
+  - 自动重跑旧工具
+  - 修改 checkpoint C 之前的历史
+
+  所以创建新 branch 更像：
+
+  设置一个新的 head 指针，而不是复制整棵树。
+
+  ---
+  2. Checkpoint 是什么
+
+  我建议把 checkpoint 定义成：
+
+  ▎ Checkpoint 是 Session 
+  ▎ 时间线上的一个可命名边界，记录“到这里为止，哪些上下文状态是稳定可恢复的”。
+
+  最重要字段不是 phase，而是：
+
+  checkpoint_id
+  session_id
+  branch_id
+  message_cursor
+  run_id?
+  iteration_index?
+  kind
+  stable
+  created_at
+  metadata
+
+  其中：
+
+  - message_cursor：恢复对话上下文最关键，表示“消息读到哪里”
+  - branch_id：属于哪条时间线
+  - run_id：如果这个 checkpoint 是某次 AgentRun 产生的
+  - kind：这个 checkpoint 是什么类型
+  - stable：是否可以给用户作为 resume / rewind 点
+
+  用户 rewind checkpoint
+
+  你理解的这种是：
+
+  ▎ 用户可选择的稳定历史点。
+
+  比如：
+
+  user_message_committed
+  assistant_message_committed
+  tool_results_committed
+  run_completed
+  context_compressed
+
+  它们用于：
+
+  - 展示历史点
+  - 从某个点 rewind
+  - 创建新 branch
+  - 恢复模型上下文
+
+  这类 checkpoint 必须稳定，不能在半个操作中间。
+
+  ---
+  3. 为什么还会有内部恢复 checkpoint
+
+  这里我之前说得可能有点混。内部恢复 checkpoint 的目标不是用户 rewind，而是：
+
+  ▎ 当 AgentRun 中断时，系统知道中断发生在哪个阶段，以及哪些副作用已经发生。
+
+  它解决的是 运行中断后的诊断和安全恢复，不是用户主动回退。
+
+  例如一次 AgentRun：
+
+  before_agent
+  before_model
+  model_call
+  after_model
+  tool_call
+  after_tool
+  after_agent
+
+  假设执行到工具阶段时程序崩了：
+
+  model 返回 tool_calls
+  tool_call 开始
+  terminal 工具已经执行了
+  还没把 tool result 写入消息表
+  进程退出
+
+  如果没有内部 checkpoint，恢复时你不知道：
+
+  - tool_call 是否已经开始
+  - 哪个 tool 已经执行
+  - tool result 是否已经提交
+  - 能不能安全重试
+  - 是否应该提示用户“上次中断在工具执行中，可能有副作用”
+
+  内部 checkpoint 的作用就是记录这些事实：
+
+  tool_call_started
+  tool_call_item_started: terminal abc
+  tool_call_item_completed: terminal abc
+  tool_results_committed
+
+  这样恢复时可以做安全判断：
+
+  如果 tool_call_started 但没有 tool_results_committed:
+    标记上次 run 为 interrupted
+    不自动重放工具
+    提示用户上次中断在工具阶段
+
+  ---
+  4. 内部 checkpoint 和用户 checkpoint 的区别
+
+  我建议不要把它们理解成两套完全不同的东西，而是同一个表里的不同可见性：
+
+  Checkpoint
+  ├── runtime checkpoint   # 系统内部用
+  └── snapshot checkpoint  # 用户可见，可 resume/rewind
+
+  区别是：
+
+  维度: 主要用途
+  runtime checkpoint: 崩溃恢复、诊断、安全判断
+  snapshot checkpoint: resume / rewind / branch
+  ────────────────────────────────────────
+  维度: 用户是否可见
+  runtime checkpoint: 默认不可见
+  snapshot checkpoint: 可见
+  ────────────────────────────────────────
+  维度: 是否稳定
+  runtime checkpoint: 不一定
+  snapshot checkpoint: 必须稳定
+  ────────────────────────────────────────
+  维度: 粒度
+  runtime checkpoint: 细，phase/action/tool item 级
+  snapshot checkpoint: 粗，消息/结果/run 级
+  ────────────────────────────────────────
+  维度: 能否 rewind
+  runtime checkpoint: 不能
+  snapshot checkpoint: 能
+  ────────────────────────────────────────
+  维度: 典型例子
+  runtime checkpoint: tool_call_started
+  snapshot checkpoint: assistant_message_committed
+  ────────────────────────────────────────
+  维度: 关注点
+  runtime checkpoint: “系统执行到哪里”
+  snapshot checkpoint: “上下文可以恢复到哪里”
+
+  ---
+  5. 内部 checkpoint 有没有必要
+
+  如果只做简单 resume / rewind，可以没有内部 checkpoint。
+
+  但如果你希望 L-Agent 有更好的恢复、回退、安全性，我建议保留一个轻量内部
+  checkpoint 机制，原因是：
+
+  第一，避免重复执行有副作用工具
+
+  工具调用是 Agent 里最危险的部分。
+
+  如果上次 run 卡在 tool_call 中间，恢复时系统必须知道：
+
+  这个工具是否已经执行过？
+  结果是否已经写入？
+  是否允许重放？
+
+  否则自动恢复可能重复执行 write_file、terminal、mysql 等操作。
+
+  第二，能标记 interrupted run
+
+  没有 runtime checkpoint，只能知道“最后一条消息是什么”。
+
+  有 runtime checkpoint，可以知道：
+
+  run 12 interrupted at tool_call
+  last completed stable checkpoint = model_response_committed
+  pending tool calls = [...]
+
+  这对 resume 很重要。
+
+  第三，便于调试 Agent 运行过程
+
+  你未来一定会想知道：
+
+  - Agent 卡在哪个阶段
+  - 哪个 step 失败
+  - 哪个 middleware 中断
+  - 为什么没有进入 after_agent
+
+  runtime checkpoint 能作为运行事件日志的骨架。
+
+  ---
+  6. 但第一版可以怎么克制
+
+  我建议第一版 checkpoint 不要复杂到“每个 step 都 checkpoint”。
+
+  可以只做两类：
+
+  用户可见 snapshot checkpoint
+
+  创建在稳定上下文边界：
+
+  user_message_committed
+  assistant_message_committed
+  tool_results_committed
+  run_completed
+
+  系统 runtime checkpoint
+
+  只创建在高风险 action 边界：
+
+  run_started
+  model_call_started
+  model_call_completed
+  tool_call_started
+  tool_call_completed
+  run_failed
+  run_interrupted
+
+  暂时不要给每个普通 step 创建 checkpoint。
+
+  这样足够支撑：
+
+  - resume
+  - rewind
+  - branch
+  - 工具中断安全判断
+  - run 状态展示
+
+  ---
+  所以我建议我们目前先形成这个共同认知：
+
+  Session 是会话容器。
+  Branch 是 Session 内的上下文时间线。
+  Rewind 不删除历史，而是从稳定 checkpoint fork 出新 branch。
+  Checkpoint 是时间线边界。
+  Snapshot checkpoint 给用户 resume / rewind。
+  Runtime checkpoint 给系统判断 run
+  是否完整、是否可安全恢复、是否可能重复副作用。
+
+  下一步我们再讨论：哪些生命周期阶段应该产生 snapshot checkpoint，哪些阶段只产生
+   runtime checkpoint。
+
+✻ Brewed for 41s
+
+❯ 好的                                                                          
+
+⏺ 好，那我们把 checkpoint 放回生命周期里讨论。
+
+  我建议先定一个原则：
+
+  ▎ snapshot checkpoint 只出现在“上下文已经稳定、可被用户恢复”的边界；runtime 
+  ▎ checkpoint 只出现在“核心动作开始/结束、可能影响恢复安全”的边界。
+
+  按这个原则，L-Agent 第一版可以这样分布：
+
+  before_agent
+    runtime:
+      - run_started
+    snapshot:
+      - user_message_committed
+
+  before_model
+    无 checkpoint，普通 step 只修改 RunContext
+
+  model_call
+    runtime:
+      - model_call_started
+      - model_call_completed
+
+  after_model
+    snapshot:
+      - assistant_message_committed
+      - final_answer_committed?   # 如果本轮无 tool_calls
+
+  tool_call
+    runtime:
+      - tool_call_started
+      - tool_call_completed
+
+  after_tool
+    snapshot:
+      - tool_results_committed
+
+  after_agent
+    runtime:
+      - run_completed / run_failed / run_interrupted
+    snapshot:
+      - run_completed_snapshot
+
+  这里有一个关键判断要先对齐：
+
+  user_message_committed 是否应该成为 snapshot checkpoint？
+
+  A. 是：用户可以 rewind 到“刚提交这条输入、还没让 Agent
+  回答”的点，方便重跑同一输入或改后续上下文。
+  B. 否：只允许 rewind 到 assistant/tool/final
+  之后的稳定点，避免回到“半轮对话”。
+  C. 作为内部稳定点，但默认不展示给用户：resume 可用，rewind 列表默认隐藏。
+  D. 取决于输入来源：用户输入展示，cron/sub-agent 输入不展示。
+
+✻ Brewed for 10s
+
+❯ A                                                                             
+
+⏺ 好，user_message_committed 作为 用户可见 snapshot checkpoint。
+
+  这意味着 L-Agent 支持一种很有用的 rewind：
+
+  用户输入已进入上下文
+  Agent 还没回答或回答不满意
+  → rewind 到这条 user message
+  → 重新运行 Agent，或从这里改分支继续
+
+  这样 checkpoint 语义会是：
+
+  user_message_committed
+    = 这条输入已经成为会话历史的一部分；
+      从这里恢复时，模型上下文包含这条 user message，
+      但不包含之后的 assistant/tool 结果。
+
+  下一个关键点：
+
+  assistant_message_committed 是否应该成为 snapshot checkpoint？
+
+  A. 是，每次模型返回都创建：包括中间带 tool_calls 的 assistant
+  message，完整保留 ReAct 时间线。
+  B. 只在最终回答时创建：中间 assistant tool_calls 只是内部过程，不作为用户
+  rewind 点。
+  C. 创建但默认折叠：用于精确 rewind，但 UI/CLI 默认只展示最终回答和工具结果点。
+  D. 不单独创建，由 run_completed 代表最终 assistant 状态。
+
+✻ Sautéed for 9s
+
+❯ 只有user_message_committed 作为 用户可见 snapshot                             
+  checkpoint，其他checkpoint都是内部过程记录                                    
+⏺ 明白，这是一个更简洁、更用户导向的设计：
+
+  ▎ 用户可见的 rewind 点只对应用户输入边界：user_message_committed。其他 
+  ▎ checkpoint 只用于内部过程记录、恢复诊断和一致性判断。
+
+  这会让 L-Agent 的 rewind 心智非常清楚：
+
+  用户只能回到“某一次输入刚提交之后”
+
+  也就是：
+
+  - 不回到中间 assistant tool_calls
+  - 不回到 tool results 之后
+  - 不暴露 ReAct 内部过程给用户
+  - rewind 语义更像“从这一轮用户输入开始重新走 Agent”
+  - 历史界面更干净
+
+  这也符合你想要的优雅简洁。
+
+  那么 checkpoint 可以重新定义为两类：
+
+  User Snapshot Checkpoint
+    - user_message_committed
+    - 用户可见
+    - 可用于 rewind / branch
+
+  Runtime Checkpoint
+    - run_started
+    - model_call_started
+    - model_call_completed
+    - assistant_message_committed
+    - tool_call_started
+    - tool_call_completed
+    - tool_results_committed
+    - run_completed / failed / interrupted
+    - 用户默认不可见
+    - 用于 resume、诊断、恢复安全
+
+  这里 assistant_message_committed、tool_results_committed
+  虽然是稳定点，但不是用户 rewind 点，只是系统知道“已经提交过，不要重复”。
+
+  接下来需要对齐一个关键问题：
+
+  resume 的语义是否也只恢复到最新 
+  user_message_committed，还是恢复到最新完整运行结果？
+
+  A. 恢复到最新完整运行结果：正常 resume 时看到完整历史，包括 assistant/tool
+  结果；这是最符合会话恢复。
+  B. 恢复到最新 user checkpoint：resume 后回到上一条用户输入，允许重新跑 Agent。
+  C. 默认恢复完整运行结果，另提供 rerun/rewind 到 user checkpoint。
+  D. 如果上次 run completed，恢复完整结果；如果 interrupted，恢复到该 run 的 
+  user checkpoint。
+
+✻ Churned for 13s
+
+❯  resume是恢复到最新完整运行结果，而rewind是恢复到最新 user_message_committed  
+
+⏺ 清楚了，这里可以定成 L-Agent 的核心语义：
+
+  resume  = 恢复 active branch 的最新完整会话状态
+  rewind  = 回到某个 user_message_committed checkpoint，并从那里创建新上下文线
+
+  也就是：
+
+  Resume
+
+  恢复的是：
+
+  最新完整运行结果
+
+  包括：
+
+  - 用户消息
+  - assistant 最终回复
+  - 中间 assistant tool_calls
+  - tool results
+  - 压缩后的上下文状态
+  - active branch 的最新 head
+
+  它的目标是：
+
+  ▎ “接着聊。”
+
+  所以 resume 不应该默认重跑上一轮。
+
+  如果上次运行完成：
+
+  resume → 恢复到 run_completed 后的完整上下文
+
+  如果上次运行中断：
+
+  resume → 恢复到最后一个完整运行结果
+         + 提示上一轮 interrupted
+
+  ---
+  Rewind
+
+  恢复的是：
+
+  某个 user_message_committed checkpoint
+
+  它的目标是：
+
+  ▎ “从某一次用户输入处重新走，或者从那里开新分支。”
+
+  这意味着：
+
+  rewind(checkpoint_id)
+    → 模型上下文包含该 user message
+    → 不包含它之后的 assistant/tool 结果
+    → 后续新运行写入新 branch 或覆盖当前上下文策略
+
+  而不是恢复到最新完整结果。
+
+  ---
+  对 checkpoint 的定义修正
+
+  现在 checkpoint 可简化为：
+
+  Checkpoint
+  ├── runtime checkpoint
+  │   ├── run_started
+  │   ├── model_call_started
+  │   ├── model_call_completed
+  │   ├── assistant_message_committed
+  │   ├── tool_call_started
+  │   ├── tool_call_completed
+  │   ├── tool_results_committed
+  │   └── run_completed / failed / interrupted
+  │
+  └── user snapshot checkpoint
+      └── user_message_committed
+
+  但需要注意：
+
+  run_completed 虽然不是用户 rewind 点，仍然是 resume head 的重要依据。
+
+  所以可以有两个游标：
+
+  branch.head_checkpoint_id
+    用于 resume，指向最新完整运行状态，通常是 run_completed
+
+  branch.last_user_checkpoint_id
+    用于 rewind 列表，指向用户输入点
+
+  或者更简单：
+
+  resume 查询最新 run_completed runtime checkpoint
+  rewind 查询 user_message_committed snapshot checkpoint
+
+  ---
+  一个例子
+
+  Session S
+  └── Branch main
+      ├── msg1 user: 设计 L-Agent
+      ├── cp1 user_message_committed   # rewind 可见
+      ├── run1 model/tool/assistant...
+      ├── cp2 run_completed            # resume head
+      ├── msg5 user: 讨论 checkpoint
+      ├── cp3 user_message_committed   # rewind 可见
+      ├── run2 model/tool/assistant...
+      └── cp4 run_completed            # resume head
+
+  resume
+
+  resume S
+  → 找 cp4
+  → 恢复到 run2 完整结束后的上下文
+
+  rewind 到 cp3
+
+  rewind cp3
+  → 上下文包含 msg1...msg5
+  → 不包含 run2 后续 assistant/tool 结果
+  → 后续从这里继续
+
+  ---
+  我建议下一步讨论一个关键分歧：
+
+  rewind 到 user checkpoint 后，是否创建新 branch？
+
+  A. 创建新 branch：保留原完整历史，新上下文从该用户输入点分叉。
+  B. 不创建 branch，只移动当前 branch head：旧后续历史被隐藏或标记为 inactive。
+  C. 默认创建 branch，但允许用户选择覆盖当前 branch。
+
+✻ Baked for 18s
+
+❯ A                                                                             
+
+⏺ 好，rewind 明确采用 创建新 branch。
+
+  于是核心语义定稿为：
+
+  Session 是会话容器
+  Branch 是 Session 内的上下文时间线
+  Resume 恢复 active branch 最新完整运行结果
+  Rewind 回到某个 user_message_committed，并创建新 branch
+
+  创建新 branch 时：
+
+  source_checkpoint = user_message_committed
+
+  new_branch:
+    session_id = source_checkpoint.session_id
+    parent_branch_id = source_checkpoint.branch_id
+    fork_checkpoint_id = source_checkpoint.id
+    base_message_cursor = source_checkpoint.message_cursor
+    head = source_checkpoint
+    status = active
+
+  session.active_branch_id = new_branch.id
+
+  恢复上下文时：
+
+  parent branch 中 message_cursor <= base_message_cursor 的消息
+  +
+  new branch 之后追加的新消息
+
+  不删除旧历史，不复制旧历史，不重放旧工具。
+
+  ---
+  现在我们可以回到阶段 Step 分布，但要带上刚定的 checkpoint/branch 语义。
+
+  我建议新的分布原则是：
+
+  ▎ before_agent 负责创建 AgentRun 与用户输入 checkpoint；ReAct 内部只记录 
+  ▎ runtime checkpoint；after_agent 负责将 run 完整提交为 resume head。
+
+  一个更准确的版本：
+
+  before_agent  # run 级，只执行一次
+    - run.create
+    - branch.load_active
+    - session.restore_branch_context
+    - input.commit_user_message
+    - checkpoint.create_user_message_snapshot
+    - budget.initialize
+
+  before_model  # iteration 级，每轮执行
+    - iteration.create
+    - context.prepare_iteration_messages
+    - memory.prefetch
+    - context.inject_memory
+    - skills.inject_index
+    - context.ensure_budget
+
+  model_call  # Action + Middleware
+    runtime checkpoints:
+      - model_call_started
+      - model_call_completed
+    middleware:
+      - model.budget_guard
+      - model.timeout
+      - model.trace
+
+  after_model  # iteration 级
+    - model.capture_response
+    - message.commit_assistant_message
+    - checkpoint.record_assistant_message_committed
+    - tool.extract_calls
+    - result.detect_final_answer
+
+  tool_call  # Action + Middleware，串行
+    runtime checkpoints:
+      - tool_call_started
+      - tool_call_completed
+    middleware:
+      - tool.approval_guard
+      - tool.audit
+      - tool.result_limit
+
+  after_tool  # iteration 级
+    - tool.capture_results
+    - message.commit_tool_results
+    - checkpoint.record_tool_results_committed
+    - context.append_tool_results
+    - context.maybe_compress
+
+  after_agent  # run 级，只执行一次
+    - run.mark_completed_or_failed
+    - checkpoint.record_run_completed
+    - branch.update_head_for_resume
+    - memory.sync
+    - run.cleanup
+
+  这里我想先确认一个细节：
+
+  memory.sync 应该在 after_agent 里发生，但它是否应该影响 rewind 分支？
+
+  A. Memory 是全局长期记忆，不随 branch 回滚：rewind 只影响 session
+  context，不撤销已写入长期记忆。
+  B. Memory 按 branch 隔离：每个 branch 有自己的 memory view，rewind
+  后不会看到原分支后续沉淀的记忆。
+  C. Memory 分层：全局用户偏好不回滚；session/branch 派生记忆可随 branch 隔离。
+  D. 第一版 after_agent 不做自动 memory.sync：先避免 memory 与 rewind 语义冲突。
+
+✻ Baked for 20s
+
+❯ 你的问题我等会再回答你，现在你先回答我几个问题，第一个是：怎么没有before      
+  tool这个环节                                                                  
+
+⏺ 这是个好问题。之前七段式里没有
+  before_tool，主要是因为我把工具前准备逻辑混进了两个地方：
+
+  after_model:
+    - tool.extract_calls
+
+  tool_call:
+    - approval / audit / dispatch
+
+  但从生命周期语义上看，这确实不够干净。
+
+  为什么应该有 before_tool
+
+  如果我们把 before_model 定义为：
+
+  ▎ 模型调用前的准备阶段
+
+  那么对称地，before_tool 应该定义为：
+
+  ▎ 工具调用前的准备阶段
+
+  否则 tool_call 这个 Action 阶段会承担太多东西：
+
+  - 解析 tool_calls
+  - 校验工具是否存在
+  - 参数解析
+  - 权限审批准备
+  - 工具调用计划生成
+  - 串行调度顺序确认
+  - runtime checkpoint
+  - 真正 dispatch
+
+  这会让 tool_call 不再是纯 Action。
+
+  更优雅的划分应该是：
+
+  after_model:
+    - model.capture_response
+    - message.commit_assistant_message
+    - result.detect_final_answer
+
+  before_tool:
+    - tool.extract_calls
+    - tool.validate_calls
+    - tool.prepare_execution_plan
+    - tool.check_policy
+
+  tool_call:
+    - tools.dispatch_serial
+
+  这样：
+
+  - after_model 只处理“模型响应落地与解释”
+  - before_tool 处理“工具调用准备”
+  - tool_call 只处理“工具执行动作”
+  - after_tool 处理“工具结果落地与回填上下文”
+
+  生命周期应该变成八段式
+
+  我建议从七段式修正为八段式：
+
+  before_agent     # run 级
+  before_model     # iteration 级
+  model_call       # action
+  after_model      # iteration 级
+  before_tool      # iteration 级，有 tool_calls 时执行
+  tool_call        # action，有 tool_calls 时执行
+  after_tool       # iteration 级，有 tool_calls 时执行
+  after_agent      # run 级
+
+  完整结构：
+
+  Session
+  └── AgentRun
+      ├── before_agent
+      ├── while budget.can_continue:
+      │   ├── before_model
+      │   ├── model_call
+      │   ├── after_model
+      │   ├── if has_tool_calls:
+      │   │   ├── before_tool
+      │   │   ├── tool_call
+      │   │   └── after_tool
+      │   │
+      │   └── else:
+      │       └── break
+      └── after_agent
+
+  为什么 F-Agent 里之前不明显
+
+  F-Agent 当前的 AgentLoop.run() 里，工具准备逻辑散在两个地方：
+
+  - response["tool_calls"] 判断在主循环里
+  - _execute_tool_calls() 内部完成调度
+  - registry 内部做 arguments 解析
+  - tool approval 在 terminal 工具内部
+
+  所以从代码看，好像不需要 before_tool。
+
+  但 L-Agent 的目标是抽象更优雅，那么 before_tool 很有必要。
+
+  加 before_tool 后的概念更一致
+
+  模型侧：
+
+  before_model → model_call → after_model
+
+  工具侧：
+
+  before_tool → tool_call → after_tool
+
+  外层：
+
+  before_agent → ReAct loop → after_agent
+
+  这比七段式更对称：
+
+  AgentRun:
+    before_agent
+    ReActIteration:
+      Model Segment:
+        before_model
+        model_call
+        after_model
+      Tool Segment:
+        before_tool
+        tool_call
+        after_tool
+    after_agent
+
+  所以我建议修正我们前面的设计：
+
+  ▎ L-Agent 生命周期不应该是七段式，而应该是八段式：补充 before_tool。
+
+  before_tool 的职责可以先定义为：
+
+  before_tool:
+    - tool.extract_calls
+    - tool.validate_calls
+    - tool.prepare_execution_plan
+    - tool.prepare_approval_context
+
+  而真正的审批是否算 before_tool step，还是 tool_call
+  middleware，我们后面可以再拆。
+
+✻ Baked for 21s
+
+❯ 第二个问题，F-Agent里的一些step设计是需要调整的，不要把F-Agent作为标准答案，  
+  而是怀着批判的态度去优化，我们现在逐段讨论这八个生命周期应该安排哪些step      
+
+⏺ 我会先记下这条设计协作原则，然后按八段生命周期逐段讨论，不再把 F-Agent
+  当标准答案。
+
+  Recalled 1 memory (ctrl+o to expand)
+
+⏺ 我需要初始化一条记忆索引，保存你对 L-Agent 讨论方式的长期偏好。
+
+  Wrote 2 memories (ctrl+o to expand)
+
+⏺ 对，这个原则我接受并修正：F-Agent 只是现状样本和反思对象，不是 L-Agent 
+  的标准答案。 我们现在应该从 Agent 语义出发重排八个生命周期，而不是把 F-Agent
+  的代码步骤搬过去。
+
+  我建议逐段讨论，每次只讨论一个阶段，先从 before_agent 开始。
+
+  八段生命周期总览
+
+  AgentRun
+  ├── before_agent        # 一次 run 的入口准备
+  ├── ReActIteration*
+  │   ├── before_model    # 模型调用前
+  │   ├── model_call      # 模型调用 action
+  │   ├── after_model     # 模型返回后
+  │   ├── before_tool     # 工具调用前，有 tool_calls 才进入
+  │   ├── tool_call       # 工具执行 action
+  │   └── after_tool      # 工具执行后
+  └── after_agent         # 一次 run 的结束收束
+
+  先讨论 before_agent
+
+  我建议 before_agent 的职责边界是：
+
+  ▎ 建立一次 AgentRun 的运行边界，并把用户输入提交为本次 run 的起点。
+
+  它不应该做模型上下文装配，也不应该做记忆召回；这些是 before_model 的事。
+
+  候选 steps：
+
+  before_agent:
+    1. run.create
+    2. branch.resolve_active
+    3. session.load_resume_head
+    4. context.initialize_run_context
+    5. input.normalize
+    6. message.commit_user
+    7. checkpoint.create_user_message_snapshot
+    8. budget.initialize
+    9. event.emit_run_started
+
+  我对这些 step 的取舍建议是：
+
+  应该放入 before_agent
+
+  run.create
+  branch.resolve_active
+  context.initialize_run_context
+  input.normalize
+  message.commit_user
+  checkpoint.create_user_message_snapshot
+  budget.initialize
+
+  可以暂缓或合并
+
+  session.load_resume_head
+
+  这个是否单独成 step，要看 resume 是 CLI 层已经选好 branch/head，还是 AgentRun
+  自己负责恢复。
+
+  event.emit_run_started
+
+  第一版可以作为 runtime log，不一定成为正式 step。
+
+  不建议放入 before_agent
+
+  memory.prefetch
+  skills.inject_index
+  context.assemble_model_input
+  context.compress
+  tool.prepare
+
+  这些都不是 run 入口职责。
+
+  我的第一版建议是：
+
+  before_agent:
+    - run.create
+    - branch.resolve_active
+    - context.initialize
+    - input.normalize
+    - message.commit_user
+    - checkpoint.create_user_snapshot
+    - budget.initialize
+
+  这里我想先听你的判断：session.load_resume_head 应该属于 before_agent 的 
+  step，还是属于 Session/CLI 在启动 AgentRun 前完成的准备？
+
+✻ Churned for 39s
+
+❯ 你提到在before agent阶段"不应该做模型上下文装配，也不应该做记忆召回"，针对这  
+  个地方，我想请你按顺序思考两个问题：                                          
+  1、模型上下文装配这一步，会装配哪些内容到上下文里                             
+  2、一个装配好的模型上下文，是一次agent run级别的，还是一次react循环级别的     
+
+⏺ 这两个问题非常关键，我按顺序回答。
+
+  1. 模型上下文装配会装配哪些内容？
+
+  我理解的 模型上下文 不是单纯 messages，而是一次 model_call
+  前真正交给模型的完整输入包。
+
+  它至少包括这些部分：
+
+  ModelContext
+  ├── system / identity context
+  ├── session conversation context
+  ├── current run input
+  ├── react iteration context
+  ├── retrieved memory context
+  ├── skill context
+  ├── workspace guidance
+  ├── tool definitions
+  ├── compression / summary context
+  └── runtime constraints
+
+  展开看：
+
+  1. Agent 身份与行为原则
+
+  例如：
+
+  你是谁
+  你应该怎么工作
+  安全边界
+  工具使用原则
+  记忆使用原则
+
+  这类内容通常来自：
+
+  SOUL / AGENT guidance / system prompt builder
+
+  它偏稳定，但不一定每次都原样硬编码，可以由配置和 workspace 决定。
+
+  ---
+  2. Session 对话历史
+
+  也就是当前 active branch 下，恢复点之前的消息：
+
+  user messages
+  assistant messages
+  tool call messages
+  tool result messages
+  compressed summary messages
+
+  这是 session / branch 时间线提供的上下文。
+
+  如果发生 rewind，新 branch 的可见历史会改变，因此这里装配的是：
+
+  当前 branch 可见消息
+
+  而不是整个 session 所有消息。
+
+  ---
+  3. 当前 AgentRun 的用户输入
+
+  这次 run 的入口输入，例如：
+
+  用户刚输入的问题
+  cron prompt
+  sub-agent task prompt
+  外部消息平台传入内容
+
+  在我们的设计里，这条输入会在 before_agent 被提交为
+  user_message_committed，所以模型上下文装配时它已经是 branch message timeline
+  的一部分。
+
+  ---
+  4. 当前 ReActIteration 的运行状态
+
+  如果是第一轮，主要是当前用户输入。
+
+  如果是后续轮，则还包括前面 iteration 产生的：
+
+  assistant tool_calls
+  tool results
+  中间模型响应
+  压缩后的上下文变化
+
+  这部分决定了模型是否继续调用工具，还是输出最终答案。
+
+  ---
+  5. 记忆召回内容
+
+  例如：
+
+  用户长期偏好
+  项目背景
+  历史相关对话
+  Agent 自己沉淀的工作经验
+
+  但这类内容不应该直接混进用户输入，最好用 fence 或专门消息边界隔离：
+
+  <memory-context>
+  ...
+  </memory-context>
+
+  它属于装配到模型上下文里的“外部召回材料”。
+
+  ---
+  6. Skill 上下文
+
+  至少有两种形态：
+
+  skill index       # 可用技能摘要
+  skill content     # 当前任务明确需要的技能正文
+
+  F-Agent 目前更偏“注入 skill index，按需加载完整 skill”。L-Agent
+  可以继续保留这个思想，但要把它变成明确 step，而不是藏在 prompt builder 里。
+
+  ---
+  7. Workspace 指引
+
+  包括：
+
+  当前工作目录
+  项目说明
+  CLAUDE.md / AGENT.md 类规则
+  本地配置
+  可用资源路径
+
+  这部分不是 session 历史，但会影响模型如何行动。
+
+  ---
+  8. Tool definitions
+
+  严格说 tool schema 不一定是 messages
+  的一部分，但它是一次模型调用输入的一部分。
+
+  所以模型上下文装配应该产出类似：
+
+  ModelRequest
+  ├── messages
+  ├── tools
+  ├── model
+  ├── temperature
+  ├── max_tokens
+  └── metadata
+
+  而不是只产出 messages。
+
+  ---
+  9. 压缩摘要与上下文预算
+
+  如果历史太长，需要装配：
+
+  压缩摘要
+  保留头部
+  保留尾部
+  当前 run 的关键消息
+
+  这部分决定最终送给模型的是完整历史、压缩历史，还是摘要 + 最近消息。
+
+  ---
+  10. Runtime constraints
+
+  例如：
+
+  本轮剩余预算
+  当前 iteration_index
+  当前允许的工具
+  当前审批状态
+  当前任务来源
+
+  这些不一定都要显式写进 prompt，但属于模型调用前的上下文决策依据。
+
+  ---
+  所以我会把模型上下文装配定义为：
+
+  ▎ 从 RunContext、Session/Branch 历史、Workspace、Memory、Skill、Tool Registry 
+  ▎ 和 Runtime State 中，构造一次 model_call 所需的 ModelRequest。
+
+  ---
+  2. 装配好的模型上下文是 AgentRun 级别，还是 ReAct 循环级别？
+
+  我的判断是：
+
+  ▎ 真正“装配好的模型上下文”是 ReActIteration 级别的，不是 AgentRun 级别的。
+
+  原因很简单：一次 AgentRun
+  里可能有多次模型调用，而每次模型调用看到的上下文都不一样。
+
+  例如：
+
+  AgentRun
+  ├── iteration 1
+  │   ├── model_context_1
+  │   ├── model_call -> 请求调用 read_file
+  │   ├── tool_result -> 文件内容
+  │
+  ├── iteration 2
+  │   ├── model_context_2  # 包含 iteration 1 的 tool_result
+  │   ├── model_call -> 请求修改文件
+  │   ├── tool_result -> 修改完成
+  │
+  └── iteration 3
+      ├── model_context_3  # 包含前两轮工具结果
+      └── model_call -> 最终回答
+
+  所以如果说的是“实际发给模型的上下文”，它一定是：
+
+  一次 model_call 一个 ModelContext
+  一次 ReActIteration 一个 ModelContext
+
+  而不是一次 AgentRun 一个固定 ModelContext。
+
+  ---
+  但这里需要补一个分层：
+
+  AgentRun 有 Base Context，ReActIteration 有 Model Context
+
+  更准确的设计应该是：
+
+  AgentRunContext       # run 级上下文基底
+  └── ModelContext      # 每轮 ReActIteration 装配出来的模型输入
+
+  AgentRunContext 是 run 级的
+
+  它在 before_agent 建立，包含：
+
+  session_id
+  branch_id
+  run_id
+  source input
+  active branch head
+  workspace config
+  memory manager
+  skill registry
+  tool registry
+  budget
+  checkpoint state
+
+  它是一块运行黑板。
+
+  ModelContext 是 iteration 级的
+
+  它在每次 before_model 装配，包含：
+
+  本轮要发给模型的 messages
+  本轮可用 tools
+  本轮注入的 memory
+  本轮注入的 skill index/content
+  本轮压缩后的上下文
+  本轮模型参数
+
+  也就是说：
+
+  before_agent:
+    初始化 RunContext
+
+  before_model:
+    基于 RunContext 装配本轮 ModelContext
+
+  model_call:
+    使用 ModelContext 调模型
+
+  ---
+  对生命周期 step 的影响
+
+  这会推翻一个容易犯的设计错误：
+
+  ▎ 不应该在 before_agent 一次性完成模型上下文装配。
+
+  before_agent 最多做：
+
+  run.create
+  branch.resolve_active
+  session/load branch state
+  input.normalize
+  message.commit_user
+  checkpoint.create_user_snapshot
+  budget.initialize
+
+  它建立 run 级基底。
+
+  真正的模型上下文装配应该在：
+
+  before_model
+
+  因为 before_model 是每个 ReActIteration 都会执行的阶段。
+
+  ---
+  我建议的结论
+
+  可以这样定：
+
+  RunContext:
+    AgentRun 级别，全局可变黑板，贯穿一次 run。
+
+  ModelContext / ModelRequest:
+    ReActIteration 级别，每次 before_model 重新装配一次。
+
+  Session / Branch History:
+    长期持久化上下文来源，不等于本轮模型上下文。
+
+  Memory / Skill / Workspace:
+    装配材料来源，不等于已装配上下文。
+
+  因此：
+
+  before_agent 负责建立 RunContext
+  before_model 负责装配 ModelContext
+  model_call 使用 ModelContext
+  after_model / after_tool 修改 RunContext
+  下一轮 before_model 再重新装配新的 ModelContext
+
+✻ Cogitated for 45s
+
+❯ 在你思考这两个问题的过程中，你发现了我想让你意识到的一件事，就是模型上下文由  
+  两部分组成：一部分是在这次agent-run过程中不变的部分，包括agent的身份、用户输  
+  入等；另一部分是每轮react都需要更新的部分，包括message                        
+  list等。对于前者，应该放到before                                              
+  agent阶段，避免每次react重复构建，对于后者，应该放到before                    
+  model阶段，每轮都进行更新。你认可我以上的分析吗，如果你认可的话，那我们接下来 
+  的任务是区别各部分内容属于这两种中的哪一种，从而得到应该放在哪个阶段，如果不  
+  认可，请告诉我你的理由。                                                      
+
+⏺ 认可，而且这是一个很重要的修正。
+
+  我之前说“模型上下文装配不应该放在 before_agent”说得太粗了。更准确应该是：
+
+  ▎ 模型上下文装配要拆成 run-invariant 部分和 iteration-variant 部分。
+
+  也就是：
+
+  before_agent:
+    构建本次 AgentRun 内不变的 Model Base Context
+
+  before_model:
+    基于 Base Context + 最新 ReAct 状态，构建本轮 ModelRequest
+
+  我认可的原因
+
+  一次 AgentRun 中确实有些内容不会变：
+
+  agent identity
+  agent guidance
+  workspace guidance
+  本次用户输入
+  本次 run_id / session_id / branch_id
+  模型配置
+  工具 registry 的基础定义
+  技能索引的基础版本
+
+  这些如果每轮 ReAct 都重新读取、重新拼接，会导致：
+
+  - 重复 IO
+  - 重复 prompt 构建
+  - 阶段职责不清
+  - before_model 变得过重
+  - 后续调试时分不清“run 初始上下文”和“本轮动态上下文”
+
+  所以它们应该在 before_agent 阶段准备好，作为 RunContext 里的稳定基底，例如：
+
+  ctx.base_model_context
+
+  而每轮 ReAct 会变化的部分，比如：
+
+  message list
+  上一轮 assistant tool_calls
+  tool results
+  本轮 memory retrieval
+  本轮上下文压缩结果
+  本轮可用工具过滤结果
+  本轮 token budget
+
+  才应该放在 before_model 阶段重新计算，产出：
+
+  ctx.current_model_request
+
+  需要补一个细微区分
+
+  我唯一要补充的是：用户输入有双重身份。
+
+  它作为“本次 AgentRun 的原始输入”是不变的，应该在 before_agent 处理：
+
+  ctx.input.original
+  ctx.input.normalized
+  ctx.run.user_message_id
+
+  但它作为“发给模型的 messages 中的一条 user message”，会进入 message
+  timeline，而 message timeline 是每轮 before_model 都会重新装配的动态部分。
+
+  所以可以这样分：
+
+  用户输入的解析、规范化、提交、checkpoint:
+    before_agent
+
+  用户输入作为 messages 的一部分进入本轮 model request:
+    before_model
+
+  这不矛盾。
+
+  我建议接下来就按这个二分法整理
+
+  我们可以把所有候选上下文材料分成三类：
+
+  ┌───────────────────┬───────────────────────┬──────────────────────────┐
+  │       类型        │         含义          │         所属阶段         │
+  ├───────────────────┼───────────────────────┼──────────────────────────┤
+  │ Run-invariant     │ 本次 AgentRun 内不变  │ before_agent             │
+  ├───────────────────┼───────────────────────┼──────────────────────────┤
+  │ Iteration-variant │ 每轮 ReAct 都可能变化 │ before_model             │
+  ├───────────────────┼───────────────────────┼──────────────────────────┤
+  │ Action-result     │ 模型或工具执行后产生  │ after_model / after_tool │
+  └───────────────────┴───────────────────────┴──────────────────────────┘
+
+  初步分类可以是：
+
+  before_agent:
+    - agent identity / soul
+    - agent behavior guidance
+    - workspace static guidance
+    - active session / branch metadata
+    - original user input normalize
+    - user message commit
+    - user snapshot checkpoint
+    - run budget initialize
+    - base tool registry snapshot
+    - base skill index snapshot?
+
+  before_model:
+    - visible message list assemble
+    - compressed history apply
+    - dynamic memory retrieval
+    - active skill content injection
+    - tool definitions filtering
+    - token budget check
+    - current model request build
+
+  所以是的，我认可你的分析。下一步我们应该逐项判断：哪些内容在一次 AgentRun 
+  内不变，哪些内容必须随 ReAct iteration 更新。
+
+✻ Cooked for 55s
+
+❯ 你的分类我基本认可，只有两处我有疑问：                                        
+  1、dynamic memory retrieval是指什么                                           
+  2、tool definitions filtering是指什么                                         
+
+⏺ 这两处问得对，因为我用了两个容易引起误解的词。
+
+  1. dynamic memory retrieval 是什么？
+
+  我这里说的 dynamic memory retrieval 指的是：
+
+  ▎ 根据当前 ReAct iteration 的上下文，检索可能相关的长期记忆 / 历史信息。
+
+  它不只是根据用户原始输入检索，也可能根据中间工具结果、模型当前进展、任务状态来
+  检索。
+
+  例如用户一开始说：
+
+  继续优化 L-Agent 的 step 设计
+
+  第一轮可能只需要召回：
+
+  L-Agent 设计偏好
+  Agent 生命周期讨论历史
+
+  但如果后续工具读取了某个文件，发现里面提到 checkpoint
+  schema，那么下一轮模型调用前可能需要召回：
+
+  之前关于 checkpoint / branch / rewind 的设计讨论
+
+  所以我当时把它放在 before_model，意思是：每轮 ReAct 
+  都可以根据最新上下文重新检索记忆。
+
+  但是这里确实有一个重要取舍：
+
+  如果 memory retrieval 只基于本次用户输入
+
+  那它是 run-invariant，可以放在 before_agent：
+
+  memory.prefetch(original_user_input)
+
+  一次 run 做一次，结果放入 base context。
+
+  如果 memory retrieval 基于当前 ReAct 状态
+
+  那它是 iteration-variant，应该放在 before_model：
+
+  memory.retrieve(current_messages + latest_tool_results + current_goal)
+
+  每轮都可能变化。
+
+  我现在更倾向的设计
+
+  对于 L-Agent 第一版，我建议把 memory 分成两层：
+
+  before_agent:
+    - memory.prefetch_for_run      # 基于用户输入，一次性召回 run 级记忆
+
+  before_model:
+    - memory.refresh_for_iteration # 可选，默认关闭或仅在触发条件满足时执行
+
+  但如果追求简洁，第一版甚至可以只做：
+
+  before_agent:
+    - memory.prefetch
+
+  理由是：
+
+  - 个人 CLI Agent 的大多数记忆召回由用户输入决定
+  - 每轮检索会增加复杂度和成本
+  - ReAct 中间态通常应通过 tool results 进入 message list，而不是反复查记忆
+  - 真正需要动态召回时，模型可以通过 memory tool 显式查询
+
+  所以我之前直接写 dynamic memory retrieval 放 before_model，偏激进了。
+
+  更克制的说法应该是：
+
+  ▎ 默认 memory retrieval 是 run 级 before_agent step；iteration 级动态 memory 
+  ▎ refresh 是高级可选 step，不作为第一版默认。
+
+  ---
+  2. tool definitions filtering 是什么？
+
+  我这里说的 tool definitions filtering 指的是：
+
+  ▎ 每次 model_call 前，根据当前状态决定本轮暴露哪些工具 schema 给模型。
+
+  例如：
+
+  - 某些工具在当前模式下禁用
+  - cron run 不允许交互式审批工具
+  - rewind 后某些危险工具不允许自动出现
+  - 预算不足时禁用 web_search
+  - 当前任务不需要数据库工具
+  - 用户配置禁用了 terminal
+  - 子 Agent 只能使用只读工具
+  - 已经进入“总结阶段”时不再暴露修改类工具
+
+  也就是说，tool registry 里可能有很多工具，但本轮给模型的 tools
+  可以是一个过滤后的列表。
+
+  它为什么可能是 before_model？
+
+  因为每轮状态可能变化：
+
+  iteration 1:
+    tools = read_file, list_files, web_search
+
+  iteration 2:
+    工具结果显示需要修改文件
+    tools = read_file, write_file, terminal
+
+  iteration 3:
+    已经准备最终回答
+    tools = none
+
+  所以从最灵活的设计看，它属于 iteration-variant。
+
+  但第一版是否需要？
+
+  不一定。
+
+  对于 L-Agent 第一版，如果目标还是 F-Agent 2.0，可以先做简单版：
+
+  before_agent:
+    - tool.snapshot_registry
+
+  也就是本次 run 开始时确定可用工具集合。
+
+  然后每轮 before_model 只是把这个工具集合放进当前 ModelRequest：
+
+  before_model:
+    - model_request.attach_tools
+
+  不做复杂动态过滤。
+
+  我现在更倾向的设计
+
+  类似 memory，也分两层：
+
+  before_agent:
+    - tools.snapshot_available_tools    # 本 run 可用工具基线
+
+  before_model:
+    - tools.select_for_iteration        # 可选，本轮工具过滤
+
+  第一版默认：
+
+  tools.select_for_iteration = no-op
+
+  也就是不动态过滤，只使用 run 级工具快照。
+
+  ---
+  修正后的分类
+
+  所以我会把之前两项改成：
+
+  before_agent:
+    - memory.prefetch_for_run
+    - tools.snapshot_available_tools
+
+  before_model:
+    - memory.refresh_for_iteration       # 可选，不默认
+    - tools.select_for_iteration         # 可选，第一版 no-op
+    - model_request.attach_tools
+
+  更简洁的第一版默认可以是：
+
+  before_agent:
+    - memory.prefetch
+    - tools.snapshot
+
+  before_model:
+    - message_list.assemble
+    - context.apply_compression
+    - model_request.build
+
+  也就是说，你指出的这两处都不应该未经讨论就默认放到
+  before_model。它们本质上都有 run 级默认 和 iteration 级高级模式 两种形态。
+
+✻ Baked for 24s
+
+❯ 先只做before                                                                  
+  agent阶段的memory-prefetch和available-tools，不做before-model阶段的           
+
+⏺ 同意，第一版先保持克制：
+
+  before_agent:
+    - memory.prefetch
+    - tools.snapshot_available_tools
+
+  before_model:
+    不做 memory refresh
+    不做 tool definitions filtering
+
+  这样语义更清晰：
+
+  memory.prefetch
+
+  输入：
+    - 本次 AgentRun 的原始用户输入
+    - session_id / branch_id
+    - 可选：用户画像、长期记忆、历史会话索引
+
+  输出：
+    - ctx.base_model_context.memory_context
+
+  它是 run-invariant：
+
+  ▎ 一次 AgentRun 只召回一次记忆，后续 ReAct 迭代复用这份记忆上下文。
+
+  如果模型在中间步骤发现需要更多记忆，应通过显式 memory tool
+  查询，而不是生命周期自动重复召回。
+
+  tools.snapshot_available_tools
+
+  输入：
+    - tool registry
+    - runtime config
+    - input source
+    - permission mode
+    - workspace capabilities
+
+  输出：
+    - ctx.base_model_context.available_tools
+
+  它也是 run-invariant：
+
+  ▎ 一次 AgentRun 开始时确定本 run 可用工具集合，每轮 model_call 
+  ▎ 默认使用这份工具快照。
+
+  第一版不做每轮动态过滤，避免工具可见性随 ReAct 隐式变化，降低调试成本。
+
+  于是 before_model 更聚焦：
+
+  before_model:
+    - iteration.create
+    - message_list.assemble
+    - context.apply_compression
+    - model_request.build
+
+  其中 model_request.build 会把：
+
+  base_model_context:
+    - identity
+    - guidance
+    - memory_context
+    - available_tools
+    - run input metadata
+
+  iteration context:
+    - visible messages
+    - latest tool results
+    - compression state
+
+  合成当前这轮的 ModelRequest。
+
+  所以目前 before_agent 可以更新为：
+
+  before_agent:
+    - run.create
+    - branch.resolve_active
+    - context.initialize
+    - input.normalize
+    - message.commit_user
+    - checkpoint.create_user_snapshot
+    - identity.load
+    - guidance.load
+    - workspace.load_static_context
+    - memory.prefetch
+    - tools.snapshot_available_tools
+    - budget.initialize
+
+  这里还有一个待定点：identity.load / guidance.load / 
+  workspace.load_static_context 是否需要拆成三个 step，还是合成一个
+  base_context.load_static_prompt_parts。这个我们可以接着讨论。
+✻ Worked for 13s
+
+❯ 这个倒是无所谓，无论是一个还是三个，都是在before agent阶段做，所以结果一样    
+
+⏺ 对，这里不必过早纠结 step 颗粒度。只要它们都属于 run-invariant base 
+  context，都放在
+  before_agent，实现上可以先合并，后续觉得某块需要单独开关/测试/替换时再拆。
+
+  那我们先把 before_agent 阶段暂定为：
+
+  before_agent:
+    - run.create
+    - branch.resolve_active
+    - context.initialize
+    - input.normalize
+    - message.commit_user
+    - checkpoint.create_user_snapshot
+    - base_context.load_static_parts
+    - memory.prefetch
+    - tools.snapshot_available_tools
+    - budget.initialize
+
+  其中：
+
+  base_context.load_static_parts
+    包括 identity / guidance / workspace static context / model config 等 run
+  内不变内容
+
+  我建议 before_agent 的职责可以定稿为：
+
+  ▎ 创建本次 AgentRun 的运行边界，提交用户输入 checkpoint，并准备本次 run 
+  ▎ 内不变的 base model context。
+
+  接下来进入第二段：before_model。
+
+  基于刚才结论，before_model 不做 memory prefetch，不做 available tools
+  snapshot。它只负责：
+
+  ▎ 为当前 ReActIteration 构建一次具体的 ModelRequest。
+
+  我建议候选 steps 是：
+
+  before_model:
+    - iteration.create
+    - messages.collect_visible
+    - context.apply_compression
+    - model_request.compose
+    - budget.check_iteration
+
+  这里每个 step 的含义：
+
+  iteration.create
+    创建本轮 ReActIteration，记录 iteration_index。
+
+  messages.collect_visible
+    从当前 branch timeline + 本 run 已产生的 assistant/tool messages
+  中收集本轮可见 message list。
+
+  context.apply_compression
+    根据上下文预算，把历史压缩摘要、保留头尾、当前 run
+  最近消息组合成可放入模型窗口的内容。
+
+  model_request.compose
+    把 before_agent 准备好的 base context + 本轮 messages + available_tools
+  组装成 ModelRequest。
+
+  budget.check_iteration
+    检查本轮是否还能继续调用模型。
+
+  我这里想先确认一个点：
+
+  budget.check_iteration 应该放在 before_model 作为 step，还是作为 model_call 的
+   middleware？
+
+  A. before_model step：还没构建/调用模型前就判断是否允许进入本轮。
+  B. model_call middleware：预算是对模型调用 action 的保护，应该包裹 call。
+  C. 两层都有：before_model 判断 ReAct 轮数预算，model_call middleware 记录
+  token/超时/调用预算。
+  D. 放在 AgentRun loop 控制里，不作为 step/middleware。
+
+✻ Cogitated for 14s
+
+❯ B                                                                             
+
+⏺ 好，budget.check_iteration 不放在 before_model，而作为 model_call 的
+  middleware。
+
+  这样 before_model 更纯粹，只负责构造本轮模型请求：
+
+  before_model:
+    - iteration.create
+    - messages.collect_visible
+    - context.apply_compression
+    - model_request.compose
+
+  model_call 负责执行模型调用，并由 middleware 控制：
+
+  model_call:
+    middleware:
+      - budget.guard
+      - timeout.guard
+      - trace.record
+    action:
+      - llm.call
+
+  这个边界更好：
+
+  - before_model 不决定“能不能调用”，只准备“如果要调用，调用什么”。
+  - model_call middleware 决定“是否允许执行 action”。
+  - 预算、超时、trace 都是围绕 action 的横切控制。
+
+  接下来讨论 model_call 阶段。
+
+  我建议 model_call 不包含普通 step，只是：
+
+  model_call:
+    runtime checkpoint:
+      - model_call_started
+      - model_call_completed / model_call_failed
+
+    middleware:
+      - budget.guard
+      - timeout.guard
+      - trace.record
+
+    action:
+      - llm.call
+
+  其中：
+
+  budget.guard
+    检查 ReAct 最大轮数、消耗一次模型调用预算；
+    如果预算耗尽，触发 graceful finalization 或停止策略。
+
+  timeout.guard
+    控制模型调用超时。
+
+  trace.record
+    记录请求元信息、耗时、token usage，但不污染 message list。
+
+  llm.call
+    使用 ctx.current_model_request 调模型，写入 ctx.current_model_response。
+
+  我想确认：model_call_started/completed 这种 runtime checkpoint，是放在 
+  middleware 里统一记录，还是由 lifecycle runner 在 action 前后自动记录？
+
+  A. lifecycle runner 自动记录：所有 action 阶段都有
+  started/completed，统一、不可忘。
+  B. trace middleware 记录：更灵活，可以替换或关闭。
+  C. checkpoint middleware 记录：显式作为 middleware，想要 checkpoint 就挂载。
+  D. 第一版不记录 model_call checkpoint，只记录 tool_call checkpoint。
+
+✻ Brewed for 13s
+
+※ recap: 我们在设计 L-Agent：固定八段生命周期，Step 可插拔，Session/Branch/Checkpoint 支持 resume/rewind；当前正在逐段确定 before_agent、before_model、model_call 的职责。下一步回答 model_call 的 checkpoint 由 runner 还是 middleware 记录。
+
+❯ lifecycle runner是什么，我们之前提到过这个概念吗                              
+
+⏺ 你提醒得对，lifecycle runner
+  是我刚才突然引入的词，我们之前没有正式对齐过这个概念。
+
+  我当时想表达的是：
+
+  ▎ 有一个对象负责按固定生命周期顺序推进 AgentRun。
+
+  但这个概念还没有被我们定义过，所以不应该直接拿来作为选项。
+
+  我们可以现在补齐它，也可以不用这个名字。
+
+  lifecycle runner 可以是什么
+
+  在 L-Agent 里，固定生命周期是：
+
+  before_agent
+  before_model
+  model_call
+  after_model
+  before_tool
+  tool_call
+  after_tool
+  after_agent
+
+  既然生命周期固定，就需要一个“执行者”来按顺序跑这些阶段。
+
+  这个执行者可以叫：
+
+  AgentRunner
+  LifecycleRunner
+  AgentRuntime
+  RunEngine
+
+  它的职责不是业务能力，而是流程推进：
+
+  run(input):
+    execute_phase(before_agent)
+
+    while not finished:
+      execute_phase(before_model)
+      execute_action(model_call)
+      execute_phase(after_model)
+
+      if has_tool_calls:
+        execute_phase(before_tool)
+        execute_action(tool_call)
+        execute_phase(after_tool)
+      else:
+        break
+
+    execute_phase(after_agent)
+
+  它会做几件事：
+
+  - 创建 / 持有 RunContext
+  - 按顺序执行固定 lifecycle
+  - 在每个 hook phase 执行注册的 steps
+  - 在 action phase 执行 middleware + action
+  - 根据 ctx 判断是否继续 ReAct loop
+  - 处理异常 / 中断 / 最终结束
+
+  也就是说，它相当于 F-Agent 里 AgentLoop 的“流程控制内核”，但比 F-Agent 的
+  AgentLoop 更薄：它只推进生命周期，不亲自做 memory、tool、session、compression
+  这些业务。
+
+  之前我们其实隐含了它
+
+  我们之前说过：
+
+  Agent = 固定 Lifecycle + Hook Phase Steps + Action Middleware
+
+  这套结构隐含需要一个执行者，否则 phase/step/action 不会自己运行。
+
+  但我们没有给它命名。
+
+  所以更准确地说：
+
+  ▎ 我刚才说的 lifecycle runner，是我们之前隐含但还没有命名的“AgentRun 
+  ▎ 流程推进器”。
+
+  它和 AgentRun / ReAct 的关系
+
+  Session
+  └── AgentRun
+      └── ReActIteration*
+
+  AgentRunner 负责执行一次 AgentRun：
+
+  AgentRunner.run(input) -> AgentRunResult
+
+  内部包含 ReAct loop：
+
+  before_agent once
+  while:
+    before_model
+    model_call
+    after_model
+    if tool_calls:
+      before_tool
+      tool_call
+      after_tool
+    else:
+      break
+  after_agent once
+
+  所以它不是新的业务层，而是承载生命周期的执行器。
+
+  是否需要叫 lifecycle runner？
+
+  我建议不要叫 LifecycleRunner，因为听起来偏框架。
+
+  对 L-Agent 来说，叫 AgentRunner 可能更自然：
+
+  Agent
+  ├── AgentRunner      # 推进一次 AgentRun
+  ├── Lifecycle        # 固定 phase 定义
+  ├── StepRegistry     # phase -> steps
+  ├── MiddlewareChain  # action wrapper
+  └── RunContext       # 一次 run 的黑板
+
+  也可以叫 RunEngine，但 AgentRunner 更直接。
+
+  ---
+  回到我刚才的问题，应该改成更准确的问法：
+
+  model_call_started/completed 这种 runtime checkpoint，应该由谁负责记录？
+
+  A. AgentRunner 自动记录 action 边界：只要进入 model_call / tool_call，自动写
+  started/completed。
+  B. checkpoint middleware 记录：把 checkpoint 当成 action
+  middleware，可以启用/替换。
+  C. model_call action 自己记录：LLM 调用实现内部负责 checkpoint。
+  D. 单独的 before/after step 记录：用 step 显式记录 checkpoint。
+
+✻ Churned for 19s
+
+❯ A                                                                             
+
+⏺ 好，那我们正式引入并命名：
+
+  ▎ AgentRunner：负责推进一次 AgentRun 的固定生命周期。
+
+  它只做流程控制，不做具体业务。
+
+  AgentRunner
+  ├── execute_phase(before_agent)
+  ├── loop ReActIteration
+  │   ├── execute_phase(before_model)
+  │   ├── execute_action(model_call)
+  │   ├── execute_phase(after_model)
+  │   ├── if has_tool_calls:
+  │   │   ├── execute_phase(before_tool)
+  │   │   ├── execute_action(tool_call)
+  │   │   └── execute_phase(after_tool)
+  │   └── else break
+  └── execute_phase(after_agent)
+
+  并且由 AgentRunner 自动记录 action 边界 runtime checkpoint：
+
+  model_call_started
+  model_call_completed
+  model_call_failed
+
+  tool_call_started
+  tool_call_completed
+  tool_call_failed
+
+  这样比 middleware 记录更稳定，因为：
+
+  - checkpoint 是运行框架的基本保障，不应该依赖某个 middleware 是否挂载。
+  - action 阶段天然有 started/completed 边界，由 AgentRunner 最清楚。
+  - LLM provider / tool dispatcher 不需要关心 checkpoint。
+  - middleware 可以做 trace/timeout/budget，但不负责基础运行进度记录。
+
+  所以 model_call 阶段现在定为：
+
+  model_call:
+    owner: AgentRunner
+    runtime checkpoint:
+      - model_call_started
+      - model_call_completed / model_call_failed
+    middleware:
+      - budget.guard
+      - timeout.guard
+      - trace.record
+    action:
+      - llm.call
+
+  接下来讨论 after_model。
+
+  我建议 after_model 的职责是：
+
+  ▎ 把模型响应解释为 AgentRun 状态变化。
+
+  它不准备工具执行细节，那是 before_tool
+  的事；但它需要判断这轮是继续工具调用，还是进入最终回答。
+
+  候选 steps：
+
+  after_model:
+    - model.capture_response
+    - message.commit_assistant
+    - usage.update
+    - result.detect_final_answer
+    - tool.detect_requested
+
+  其中：
+
+  model.capture_response
+    把 raw model response 放入 ctx.current_model_response。
+
+  message.commit_assistant
+    把 assistant message 写入 branch timeline。
+    注意：即使 assistant message 包含 tool_calls，也应该 commit，因为这是 ReAct
+  历史的一部分。
+
+  usage.update
+    更新 run/session 的 token usage、耗时等统计。
+
+  result.detect_final_answer
+    如果没有 tool_calls，则把 assistant content 标记为 ctx.final_result。
+
+  tool.detect_requested
+    如果有 tool_calls，则设置 ctx.has_tool_calls = true。
+
+  内部 checkpoint：
+
+  assistant_message_committed
+
+  这个 checkpoint 不用户可见，只用于 resume/诊断/避免重复提交。
+
+  我想确认一个边界：包含 tool_calls 的 assistant message 是否应该 commit 到 
+  message timeline？
+
+  A. 是：完整保留 ReAct 轨迹，后续工具结果必须能对应 tool_call_id。
+  B. 否：中间 assistant tool_calls 是内部过程，只在 run log 保存，不进
+  conversation messages。
+  C. 只保存结构化 tool_calls，不保存 assistant message 内容。
+  D. 第一版保存，未来可以压缩/折叠显示。
+
+✻ Churned for 17s
+
+❯ A                                                                             
+
+⏺ 同意，包含 tool_calls 的 assistant message 必须 commit 到 message timeline。
+
+  理由很充分：
+
+  - OpenAI/Claude 类 tool calling 都要求 tool result 能对应前面的 assistant tool
+   call。
+  - 后续 ReAct iteration
+  的模型上下文需要看到“模型刚才请求了哪些工具”以及工具结果。
+  - resume 到完整运行结果时，必须能重建真实 messages。
+  - 这属于运行事实，不应该只放 run log。
+  - UI/CLI 可以折叠显示，但底层 timeline 要完整。
+
+  所以 after_model 暂定：
+
+  after_model:
+    - model.capture_response
+    - message.commit_assistant
+    - usage.update
+    - result.detect_final_answer
+    - tool.detect_requested
+
+  对应内部 checkpoint：
+
+  assistant_message_committed
+
+  然后进入 before_tool。
+
+  我建议 before_tool 的职责是：
+
+  ▎ 把模型请求的 tool_calls 转换成一个可执行、可审计、可安全处理的 ToolPlan。
+
+  它不执行工具。
+
+  候选 steps：
+
+  before_tool:
+    - tool_calls.extract
+    - tool_calls.parse_arguments
+    - tool_calls.validate_schema
+    - tool_calls.resolve_tools
+    - tool_plan.build_serial
+    - approval.prepare_requests
+
+  解释一下：
+
+  tool_calls.extract
+    从 current_model_response 或已提交 assistant message 中取出 tool_calls。
+
+  tool_calls.parse_arguments
+    把 JSON string arguments 解析成 dict。
+
+  tool_calls.validate_schema
+    校验参数是否符合工具 schema。
+
+  tool_calls.resolve_tools
+    确认工具在 before_agent 阶段 snapshot 的 available_tools 内。
+
+  tool_plan.build_serial
+    构建串行执行计划，保持模型返回顺序。
+
+  approval.prepare_requests
+    对可能需要用户确认的工具提前准备审批请求。
+
+  但这里有一个边界要讨论：
+
+  工具参数解析和未知工具处理，应该放在 before_tool，还是继续放在 
+  ToolRegistry/ToolDispatcher 里？
+
+  A. 放 before_tool：tool_call action 只执行已验证的 ToolPlan，职责最清晰。
+  B. 放 ToolDispatcher：工具调度器天然负责解析和找工具，before_tool
+  只做轻量准备。
+  C. 两层都有：before_tool 做计划级校验，dispatcher 做最终防御性校验。
+  D. 第一版放 dispatcher，后续再拆到 before_tool。
+
+✻ Brewed for 13s
+
+❯ C                                                                             
+
+⏺ 好，采用 两层校验：
+
+  before_tool:
+    做计划级解析与校验，产出 ToolPlan
+
+  ToolDispatcher:
+    做最终防御性校验，保证即使 ToolPlan 有问题也不会错误执行
+
+  这样边界最稳：
+
+  before_tool 的职责
+
+  before_tool:
+    - tool_calls.extract
+    - tool_calls.parse_arguments
+    - tool_calls.validate_schema
+    - tool_calls.resolve_tools
+    - tool_plan.build_serial
+    - approval.prepare_requests
+
+  输出：
+
+  ctx.current_tool_plan
+
+  它应该是结构化的：
+
+  ToolPlan
+  ├── run_id
+  ├── iteration_index
+  ├── calls:
+  │   ├── call_id
+  │   ├── tool_name
+  │   ├── arguments
+  │   ├── order
+  │   ├── risk_level
+  │   └── status: pending
+  └── execution_mode: serial
+
+  ToolDispatcher 的职责
+
+  即使 before_tool 已经校验过，dispatcher 仍然要防御：
+
+  tool_call action:
+    - check tool exists
+    - check arguments parseable
+    - check schema if needed
+    - enforce serial execution
+    - execute handler
+    - catch exceptions
+    - wrap result
+
+  因为 ToolDispatcher 是系统边界，不能假设上游永远正确。
+
+  approval 的位置
+
+  这里也要分层：
+
+  before_tool:
+    approval.prepare_requests
+      识别哪些 call 需要审批，构建审批上下文
+
+  tool_call middleware:
+    approval.guard
+      真正阻止或放行执行
+
+  也就是说：
+
+  - before_tool 负责“知道要审批什么”
+  - tool_call middleware 负责“没有批准就不执行”
+
+  这样符合 Action + Middleware 的设计。
+
+  接下来讨论 tool_call。
+
+  目前可以定为：
+
+  tool_call:
+    owner: AgentRunner
+    runtime checkpoint:
+      - tool_call_started
+      - tool_call_completed / tool_call_failed
+
+    middleware:
+      - approval.guard
+      - audit.record
+      - result_limit.guard
+
+    action:
+      - tools.dispatch_serial
+
+  其中：
+
+  approval.guard
+    根据 ctx.current_tool_plan 判断是否需要审批。
+    如果拒绝，生成拒绝类 tool result，而不是执行工具。
+
+  audit.record
+    记录工具执行开始、结束、耗时、风险等级。
+
+  result_limit.guard
+    对工具结果统一截断或结构化限制。
+
+  tools.dispatch_serial
+    按 ToolPlan 顺序执行工具。
+
+  我想确认一个点：工具审批失败或用户拒绝时，应该如何进入后续流程？
+
+  A. 生成 tool_result 表示拒绝，然后进入 
+  after_tool，再回到模型：让模型基于拒绝结果继续回答。
+  B. 直接终止 AgentRun，after_agent 生成失败结果。
+  C. 区分工具类型：必要工具拒绝则终止，可选工具拒绝则返回模型。
+  D. 由审批 middleware 决定策略，默认 A。
+
+✻ Churned for 16s
+
+❯ A                                                                             
+
+⏺ 同意，默认采用 A：
+
+  ▎ 审批失败 / 用户拒绝时，不直接终止 AgentRun，而是生成拒绝类 tool_result，进入
+  ▎  after_tool，再回到模型。
+
+  这样最符合 ReAct 语义：
+
+  模型请求工具
+  → 系统/用户拒绝
+  → 拒绝也是一种 observation
+  → 模型根据 observation 调整策略或给出解释
+
+  例如 tool result 可以是：
+
+  {
+    "status": "denied",
+    "reason": "User denied execution",
+    "tool_name": "terminal",
+    "tool_call_id": "abc"
+  }
+
+  然后按正常工具结果进入 message timeline。
+
+  所以 tool_call 阶段定为：
+
+  tool_call:
+    runtime checkpoint:
+      - tool_call_started
+      - tool_call_completed / tool_call_failed
+
+    middleware:
+      - approval.guard
+      - audit.record
+      - result_limit.guard
+
+    action:
+      - tools.dispatch_serial
+
+  注意这里 approval.guard 的行为不是“抛异常终止”，而是：
+
+  if denied:
+    ctx.current_tool_results = denied results
+    skip actual dispatch
+    return
+
+  接下来讨论 after_tool。
+
+  我建议 after_tool 的职责是：
+
+  ▎ 把工具执行结果提交为下一轮 ReAct 可见的 observation，并维护上下文预算。
+
+  候选 steps：
+
+  after_tool:
+    - tool_results.capture
+    - message.commit_tool_results
+    - checkpoint.record_tool_results_committed
+    - context.append_observations
+    - context.maybe_compress
+
+  不过这里有个关键问题：如果 message.commit_tool_results 已经把工具结果写入
+  timeline，那么 context.append_observations 是否还需要？
+
+  我倾向于不需要单独 append，除非 RunContext 内有一份内存态 message
+  buffer。否则容易双写。
+
+  所以更简洁：
+
+  after_tool:
+    - tool_results.capture
+    - message.commit_tool_results
+    - checkpoint.record_tool_results_committed
+    - context.maybe_compress
+
+  其中：
+
+  message.commit_tool_results
+    把每个 tool result 写成 role=tool message，保留 tool_call_id。
+
+  context.maybe_compress
+    检查当前 branch visible messages 是否接近上下文窗口；
+    如果需要，生成 compression artifact，并更新 branch/run 的 compression
+  state。
+
+  我想确认：上下文压缩 context.maybe_compress 应该放在 after_tool，还是放在 
+  before_model？
+
+  A. after_tool：工具结果通常最容易撑爆上下文，工具后立即压缩。
+  B. before_model：只有在下一次模型调用前才知道真正要发送的上下文，压缩放这里最
+  准确。
+  C. 两处都有：after_tool 做工具结果裁剪/持久化，before_model 做最终窗口压缩。
+  D. 作为单独 ContextManager，不属于生命周期 step。
+
+✻ Brewed for 15s
+
+❯ B                                                                             
+
+⏺ 同意，context.maybe_compress 放在 before_model 更准确。
+
+  因为压缩的目标不是“工具后立刻做点什么”，而是：
+
+  ▎ 为下一次 model_call 构建一个能放进上下文窗口的 ModelRequest。
+
+  只有在 before_model 才能同时看到：
+
+  - base context
+  - 当前 visible messages
+  - 最新 tool results
+  - 本轮可用 tools
+  - 模型 context window
+  - 当前 compression state
+  - 本次即将发送的完整 ModelRequest
+
+  所以压缩应该是模型请求构建前的一步，而不是 after_tool 里的副作用。
+
+  这样 after_tool 更干净：
+
+  after_tool:
+    - tool_results.capture
+    - message.commit_tool_results
+    - checkpoint.record_tool_results_committed
+
+  而 before_model 更新为：
+
+  before_model:
+    - iteration.create
+    - messages.collect_visible
+    - context.apply_compression
+    - model_request.compose
+
+  这里 context.apply_compression 的职责是：
+
+  根据当前 visible messages + base context + model context window，
+  决定是否使用已有摘要、是否生成新摘要、如何裁剪/保留消息，
+  最终产出本轮可发送给模型的 compressed/visible context。
+
+  需要注意：如果压缩需要调用 LLM
+  生成摘要，那么它本身可能也是一个模型调用。后面我们可以再讨论它是普通 step、子
+  action，还是外部 ContextCompressor 服务。
+
+  现在还有最后一个生命周期阶段：after_agent。
+
+  我建议它的职责是：
+
+  ▎ 结束本次 AgentRun，提交 run 级状态，并更新 resume 所需的 branch head。
+
+  候选 steps：
+
+  after_agent:
+    - result.finalize
+    - run.mark_completed_or_failed
+    - checkpoint.record_run_terminal_state
+    - branch.update_resume_head
+    - stats.update_session
+    - memory.sync
+    - cleanup.release_runtime_state
+
+  解释：
+
+  result.finalize
+    确认 ctx.final_result，处理预算耗尽、模型错误、工具拒绝后的最终状态。
+
+  run.mark_completed_or_failed
+    写入 AgentRun 状态：completed / failed / interrupted。
+
+  checkpoint.record_run_terminal_state
+    写 runtime checkpoint：run_completed / run_failed / run_interrupted。
+
+  branch.update_resume_head
+    如果 run completed，把 active branch 的 resume head 更新到这次完整结果。
+
+  stats.update_session
+    更新 session 的 updated_at、turn_count、token/tool 统计等。
+
+  memory.sync
+    根据本次完整 run 内容提取长期记忆。
+
+  cleanup.release_runtime_state
+    清理临时状态、关闭资源。
+
+  这里我想先问一个和 checkpoint 语义强相关的问题：
+
+  branch.update_resume_head 应该在 memory.sync 之前还是之后？
+
+  A. 之前：只要对话结果完整，就先更新 resume head；memory sync
+  是附加沉淀，不影响会话恢复。
+  B. 之后：只有 memory sync 成功，才认为本次 run 完整。
+  C. 分离：resume head 更新只依赖 message/run 完整提交；memory sync
+  有自己的状态和失败记录。
+  D. 第一版不在 after_agent 自动 memory.sync。
+
+✻ Churned for 23s
+
+❯ D，后续我会专门设计持久化记忆的管理机制                                       
+
+⏺ 我会把“持久化记忆机制独立设计、after_agent 第一版不自动 sync”记录为 L-Agent
+  的项目设计决策。
+
+  Wrote 2 memories (ctrl+o to expand)
+
+⏺ 好的，after_agent 第一版不放
+  memory.sync。持久化记忆后续作为独立机制设计，不把它混进 AgentRun 收尾。
+
+  那么 after_agent 可以收敛为：
+
+  after_agent:
+    - result.finalize
+    - run.mark_terminal_state
+    - checkpoint.record_run_terminal_state
+    - branch.update_resume_head
+    - stats.update_session
+    - cleanup.release_runtime_state
+
+  其中：
+
+  result.finalize
+    确认最终输出或失败说明。
+
+  run.mark_terminal_state
+    标记 completed / failed / interrupted。
+
+  checkpoint.record_run_terminal_state
+    记录 run_completed / run_failed / run_interrupted runtime checkpoint。
+
+  branch.update_resume_head
+    仅当 run completed 时，更新 active branch 的 resume head。
+
+  stats.update_session
+    更新 session.updated_at、turn_count、token/tool 统计等。
+
+  cleanup.release_runtime_state
+    清理临时资源。
+
+  到这里，八段生命周期的第一版 step 分布可以暂时整理为：
+
+  before_agent:
+    - run.create
+    - branch.resolve_active
+    - context.initialize
+    - input.normalize
+    - message.commit_user
+    - checkpoint.create_user_snapshot
+    - base_context.load_static_parts
+    - memory.prefetch
+    - tools.snapshot_available_tools
+    - budget.initialize
+
+  before_model:
+    - iteration.create
+    - messages.collect_visible
+    - context.apply_compression
+    - model_request.compose
+
+  model_call:
+    action: llm.call
+    middleware:
+      - budget.guard
+      - timeout.guard
+      - trace.record
+    runner checkpoints:
+      - model_call_started
+      - model_call_completed / model_call_failed
+
+  after_model:
+    - model.capture_response
+    - message.commit_assistant
+    - usage.update
+    - result.detect_final_answer
+    - tool.detect_requested
+    internal checkpoint:
+      - assistant_message_committed
+
+  before_tool:
+    - tool_calls.extract
+    - tool_calls.parse_arguments
+    - tool_calls.validate_schema
+    - tool_calls.resolve_tools
+    - tool_plan.build_serial
+    - approval.prepare_requests
+
+  tool_call:
+    action: tools.dispatch_serial
+    middleware:
+      - approval.guard
+      - audit.record
+      - result_limit.guard
+    runner checkpoints:
+      - tool_call_started
+      - tool_call_completed / tool_call_failed
+
+  after_tool:
+    - tool_results.capture
+    - message.commit_tool_results
+    - checkpoint.record_tool_results_committed
+
+  after_agent:
+    - result.finalize
+    - run.mark_terminal_state
+    - checkpoint.record_run_terminal_state
+    - branch.update_resume_head
+    - stats.update_session
+    - cleanup.release_runtime_state
+
+  下一个我建议重点讨论：before_agent 里的 message.commit_user 和 
+  checkpoint.create_user_snapshot 的顺序与事务关系，因为它直接决定 rewind
+  分支是否可靠。
+✻ Sautéed for 46s
+
+❯ 这个地方存在什么问题                                                          
+
+⏺ 这里的问题在于：message.commit_user 和 checkpoint.create_user_snapshot
+  不是两个普通 step，它们共同构成 rewind 的原子边界。
+
+  如果处理不好，会出现几类不一致。
+
+  1. 写入 user message 成功，但 checkpoint 失败
+
+  流程：
+
+  message.commit_user ✅
+  checkpoint.create_user_snapshot ❌
+
+  结果：
+
+  - 会话里出现了一条用户消息
+  - 但没有对应的 rewind checkpoint
+  - 用户无法 rewind 到这条输入
+  - branch 的可恢复边界不完整
+  - 如果后续 run 中断，系统不知道这条 user message 是否是一个合法 run 起点
+
+  这会破坏我们刚定的语义：
+
+  ▎ 每个用户输入边界都是用户可见 snapshot checkpoint。
+
+  ---
+  2. checkpoint 成功，但 user message 失败
+
+  流程：
+
+  checkpoint.create_user_snapshot ✅
+  message.commit_user ❌
+
+  或者 checkpoint 先写了，但 message 没写成功。
+
+  结果更糟：
+
+  - checkpoint 指向一个不存在的 message_cursor
+  - rewind 到这个 checkpoint 时无法恢复上下文
+  - 新 branch 的 base_message_cursor 是坏的
+  - resume/rewind 数据结构出现悬挂引用
+
+  所以 checkpoint 必须依赖 user message 已成功提交。
+
+  ---
+  3. 两者之间 run 崩溃
+
+  流程：
+
+  message.commit_user ✅
+  程序退出
+  checkpoint.create_user_snapshot 未执行
+
+  恢复时会看到：
+
+  - 最后一条 message 是 user
+  - 但没有 snapshot checkpoint
+  - run 可能没有完成
+  - active branch head 还在旧 run_completed
+
+  这时系统要决定：
+
+  这条 user message 是 orphan message？
+  是否要补 checkpoint？
+  是否要删除/隐藏它？
+  是否标记 interrupted run？
+
+  如果没有事务或恢复规则，resume 会很混乱。
+
+  ---
+  4. branch cursor 更新时机不清楚
+
+  user_message_committed checkpoint 要记录：
+
+  message_cursor = 当前 user message 的 sequence/id
+
+  如果 message 写入和 checkpoint 写入不是同一个事务，就可能出现：
+
+  - checkpoint cursor 指错
+  - branch head 没更新
+  - rewind 取不到正确的消息范围
+  - 多线程/后台任务并发写入时 sequence 不稳定
+
+  ---
+  5. 用户 checkpoint 是否属于 run？
+
+  还有一个语义问题：
+
+  user_message_committed checkpoint
+
+  它既是：
+
+  - 用户可见 rewind 点
+  - 本次 AgentRun 的起点
+  - branch timeline 的一个稳定边界
+
+  所以它应该关联：
+
+  session_id
+  branch_id
+  run_id
+  message_id / message_cursor
+
+  如果 run.create、message.commit_user、checkpoint.create_user_snapshot
+  三者不是一个明确事务，很容易出现：
+
+  - message 有 run_id，但 checkpoint 没 run_id
+  - checkpoint 有 run_id，但 run 不存在
+  - run_started 了，但没有用户消息
+  - 用户消息存在，但 run 失败后边界不清
+
+  ---
+  我建议的处理方式
+
+  把这几个 step 合并成一个事务性 step，或者至少放进同一个 storage transaction：
+
+  before_agent:
+    - run.create_with_user_checkpoint
+
+  它内部原子完成：
+
+  1. create agent_run(status=running)
+  2. append user message(branch_id, run_id, sequence)
+  3. create checkpoint(
+       kind=user_snapshot,
+       name=user_message_committed,
+       message_cursor=user_message.id or sequence,
+       run_id=run.id,
+       visible_to_user=true
+     )
+  4. mark run input committed
+
+  对外仍然可以在概念上拆分：
+
+  run.create
+  message.commit_user
+  checkpoint.create_user_snapshot
+
+  但实现上应保证：
+
+  ▎ 要么三者都成功，要么三者都不成功。
+
+  这样 rewind 才可靠。
+
+  ---
+  如果失败怎么处理
+
+  事务失败：
+
+  before_agent failed
+  → 不进入 ReAct
+  → run 不成立，或者 run 标记 failed_without_input
+  → 不产生用户可见 checkpoint
+
+  恢复时：
+
+  只认完整的 user_message_committed checkpoint
+
+  如果历史里发现 orphan user message，可以作为数据修复逻辑处理，但不进入正常
+  resume/rewind 语义。
+
+  ---
+  所以我说这里值得重点讨论，是因为它不是 step 顺序的小问题，而是：
+
+  ▎ 用户输入、AgentRun、checkpoint、branch timeline 四者之间的原子一致性问题。
+
+✻ Worked for 21s
+
+❯ 目前先专注整体设计，这个问题后续再讨论                                        
+
+⏺ 好的，这个事务一致性问题先挂起，后续进入持久化/存储设计时再细化。
+
+  目前整体设计层面，我们只保留语义：
+
+  before_agent:
+    - commit user message
+    - create user snapshot checkpoint
+
+  并暂时约定：
+
+  ▎ 这两者共同形成 rewind 的用户输入边界。
+
+  不展开实现事务细节。
+
+  那我们继续整体 Step 分布。当前八段版本可以作为第一版宏观方案：
+
+  before_agent:
+    - run.create
+    - branch.resolve_active
+    - context.initialize
+    - input.normalize
+    - message.commit_user
+    - checkpoint.create_user_snapshot
+    - base_context.load_static_parts
+    - memory.prefetch
+    - tools.snapshot_available_tools
+    - budget.initialize
+
+  before_model:
+    - iteration.create
+    - messages.collect_visible
+    - context.apply_compression
+    - model_request.compose
+
+  model_call:
+    middleware:
+      - budget.guard
+      - timeout.guard
+      - trace.record
+    action:
+      - llm.call
+
+  after_model:
+    - model.capture_response
+    - message.commit_assistant
+    - usage.update
+    - result.detect_final_answer
+    - tool.detect_requested
+
+  before_tool:
+    - tool_calls.extract
+    - tool_calls.parse_arguments
+    - tool_calls.validate_schema
+    - tool_calls.resolve_tools
+    - tool_plan.build_serial
+    - approval.prepare_requests
+
+  tool_call:
+    middleware:
+      - approval.guard
+      - audit.record
+      - result_limit.guard
+    action:
+      - tools.dispatch_serial
+
+  after_tool:
+    - tool_results.capture
+    - message.commit_tool_results
+    - checkpoint.record_tool_results_committed
+
+  after_agent:
+    - result.finalize
+    - run.mark_terminal_state
+    - checkpoint.record_run_terminal_state
+    - branch.update_resume_head
+    - stats.update_session
+    - cleanup.release_runtime_state
+
+  下一个我建议讨论 上下文压缩在 before_model 的位置和形态。因为它虽然放在
+  before_model，但可能涉及额外 LLM 摘要调用，容易污染“本轮模型调用”的语义。
+
+  关键问题是：
+
+  context.apply_compression 是否允许自己调用 LLM 生成摘要？
+
+  A. 允许：压缩器是 before_model step，可以内部调用摘要模型。
+  B. 不允许：before_model 只能做纯装配，压缩摘要必须提前由独立机制生成。
+  C. 允许但必须走独立 compressor client，不计入 ReAct iteration 的 model_call。
+  D. 第一版只做裁剪/复用已有摘要，不做实时 LLM 压缩。
+
+✻ Cogitated for 15s
+
+❯ 具体的上下文压缩策略也放在后续讨论                                            
+
+⏺ 好的，上下文压缩策略后续单独讨论。现在整体设计里只保留一个占位 step：
+
+  before_model:
+    - context.prepare_with_budget
+
+  它的语义是：
+
+  ▎ 在构建 ModelRequest 前，确保本轮上下文符合模型窗口限制。
+
+  但暂时不决定它是裁剪、摘要、复用已有压缩状态，还是调用压缩模型。
+
+  这样 before_model 可以更抽象地写成：
+
+  before_model:
+    - iteration.create
+    - messages.collect_visible
+    - context.prepare_with_budget
+    - model_request.compose
+
+  到目前为止，我们已经基本对齐：
+
+  Session
+  └── Branch*
+      └── AgentRun*
+          └── ReActIteration*
+
+  以及：
+
+  AgentRunner 执行固定八段生命周期
+  Hook Phase 内部由 Step 组成
+  model_call / tool_call 是 Action + Middleware
+  RunContext 是一次 AgentRun 的全局可变黑板
+  Base Model Context 是 run 级不变部分
+  ModelRequest 是 iteration 级动态装配结果
+
+  我建议下一步把整体方案整理为 2-3 个可选宏观方案，做一次取舍确认，然后再进入“正
+  式设计稿”。当前看起来我会推荐这个方案：
+
+  ▎ 固定八段 Lifecycle + Step Registry + AgentRunner + Checkpoint/Branch 
+  ▎ 时间线模型。
+
+  但在正式进入设计稿前，我还想问最后一个宏观问题：
+
+  L-Agent 第一版是否要把 Sub-Agent / 多 Agent 交互纳入生命周期设计？
+
+  A. 不纳入：第一版只做单 AgentRun，sub-agent 后续作为 tool 或 task 扩展。
+  B. 作为 tool_call 的一种工具：sub-agent invocation 本质上是工具调用。
+  C. 作为 AgentRun 的嵌套运行：一个 AgentRun 可以派生子 AgentRun。
+  D. 只在概念上预留，不进入第一版实现。
+
+✻ Cogitated for 13s
+
+❯ /export                                                                       
+  ⎿  Conversation exported to: /Users/wangdeyu/Desktop/OPC-Agent/第一版设计.txt
+
+❯ 多Agent可以基于A2A协议实现，在我的理解里，agent之间是互相调用的关系，而不是从 
+  属关系，所以不存在子agent的概念，每个agent都是完整的agent，然后要实现多agent  
+  只需要设计好agent之间的交互协议即可，你认为呢                                 
+
+⏺ 我会把“多 Agent 是 A2A 对等调用而非子 Agent 从属关系”记录为 L-Agent
+  的项目设计决策。
+
+  Wrote 2 memories (ctrl+o to expand)
+
+⏺ 我认同，而且这个判断会让 L-Agent 的概念更干净。
+
+  “子 Agent”这个说法隐含了从属关系：
+
+  Parent Agent
+  └── Sub Agent
+
+  它容易把多 Agent 设计成“一个主控 Agent
+  派发任务给下级执行器”。但如果你的目标是更优雅地定义 Agent，那么更合理的是：
+
+  Agent A  ←A2A Protocol→  Agent B
+
+  每个 Agent 都是完整主体，都有自己的：
+
+  - lifecycle
+  - session / branch / run
+  - memory
+  - tools
+  - skills
+  - permission policy
+  - workspace
+  - identity / guidance
+
+  它们之间不是内部组件调用，而是 协议交互。
+
+  我建议的定义
+
+  ▎ 多 Agent 不是 AgentRun 内部派生子运行，而是一个 Agent 通过 A2A 
+  ▎ 协议向另一个完整 Agent 发起交互请求。
+
+  所以在 L-Agent 第一版生命周期里，不需要引入 sub_agent 概念。
+
+  如果未来支持多 Agent，它可以表现为一种能力：
+
+  tool_call:
+    - a2a.call_agent
+
+  但语义上它不是“调用工具那么简单”，而是：
+
+  当前 Agent 发起一次 A2A Request
+  目标 Agent 启动自己的 AgentRun
+  目标 Agent 返回 A2A Response
+  当前 Agent 把 response 作为 observation 继续推理
+
+  这对当前设计的影响
+
+  当前 L-Agent 第一版可以先这样处理：
+
+  Multi-Agent:
+    第一版不进入核心生命周期
+    后续通过 A2A Protocol 扩展
+    A2A 调用可以先作为 tool/action adapter 接入
+    目标 Agent 保持完整 Agent 身份和生命周期
+
+  也就是说，核心生命周期仍然保持：
+
+  AgentRunner
+  └── AgentRun
+      └── ReActIteration
+
+  不需要变成：
+
+  AgentRun
+  └── SubAgentRun
+
+  更准确的长期模型
+
+  长期可以是：
+
+  Agent
+  ├── AgentRuntime
+  ├── A2A Server
+  ├── A2A Client
+  └── A2A Policy
+
+  A2A 交互流程：
+
+  Agent A tool_call / action
+    → A2AClient.send(request)
+    → Agent B receives request
+    → Agent B creates its own Session/AgentRun
+    → Agent B returns result/artifacts/status
+    → Agent A receives response as observation
+
+  这保留了两个关键原则：
+
+  1. Agent 是完整主体
+    - 不是被主 Agent 控制的函数。
+    - 有自己的边界和自治性。
+  2. 交互靠协议，不靠内部耦合
+    - Agent 之间通过 request / response / capability / auth / context contract
+  交互。
+    - 不共享 RunContext。
+    - 不共享 memory。
+    - 不直接操控对方生命周期。
+
+  所以我建议 L-Agent 文档里避免用“子 Agent”作为核心概念，改用：
+
+  Peer Agent
+  A2A Interaction
+  Agent Invocation
+  Remote Agent Run
+
+  结论：我认可你的判断。多 Agent 应该基于 A2A 对等协议实现，而不是子 Agent 
+  从属模型；L-Agent 第一版核心生命周期不需要纳入多 Agent，只需保证未来 A2A 
+  可以作为一种外部交互能力接入。
+
+✻ Crunched for 36s
+
+❯ 可以                                                                          
+
+⏺ 好，那多 Agent 先定为 A2A 对等交互能力，不进入 L-Agent 第一版核心生命周期。
+
+  现在我建议把我们目前讨论出的方向收敛成 3 个宏观方案：
+
+  方案 A：生命周期重构优先
+
+  核心是：
+
+  AgentRunner + 固定八段 Lifecycle + Step Registry + Action Middleware
+
+  重点解决：
+
+  - AgentLoop 过重
+  - 各阶段职责不清
+  - Step 可插拔、可测试、可配置
+  - model/tool action 有 middleware 控制边界
+
+  但 checkpoint/branch/resume/rewind 只做基础能力。
+
+  适合：先把 F-Agent 重构成 L-Agent 的清晰内核。
+
+  ---
+  方案 B：时间线恢复优先
+
+  核心是：
+
+  Session + Branch + Checkpoint + AgentRun Timeline
+
+  重点解决：
+
+  - resume
+  - rewind
+  - branch fork
+  - user_message checkpoint
+  - run_completed resume head
+  - interrupted run 诊断
+
+  生命周期 step 设计服务于持久化时间线。
+
+  适合：优先做出类似 Claude Code 的会话恢复/回退体验。
+
+  ---
+  方案 C：统一内核方案
+
+  核心是把 A 和 B 一起作为 L-Agent 第一版基础架构：
+
+  AgentRunner
+  固定八段 Lifecycle
+  Step Registry
+  Action Middleware
+  RunContext
+  Session / Branch / AgentRun / ReActIteration
+  Checkpoint
+
+  重点是一次性把 运行生命周期 和 会话时间线 两个核心抽象对齐。
+
+  代价是第一版设计复杂一些，但概念最完整。
+
+  ---
+  我的推荐是 方案 C，但实现推进时分层落地：
+
+  1. 设计上采用完整统一模型。
+  2. 实现上先做 AgentRunner + lifecycle + step。
+  3. 再接 checkpoint / branch / resume / rewind。
+  4. memory persistence、context compression、A2A 后续单独设计。
+
+  这样不会把第一版实现拖得太重，但设计不会留下结构性短板。
+
+  你认同我们以 方案 C：统一内核方案 作为 L-Agent 第一版宏观设计方向吗？
+
+✻ Worked for 15s
+
+❯ 认同                                                                          
+
+⏺ 我会把方案 C
+  标记为已确认，然后进入设计呈现阶段，先给出第一部分核心概念供你确认。
+
+⏺ 好，我们确认 L-Agent 第一版采用：
+
+  ▎ 统一内核方案：固定八段生命周期 + Step Registry + Action Middleware + 
+  ▎ Session/Branch/Checkpoint 时间线模型。
+
+  我先呈现设计的第一部分：核心概念与关系。你确认后，我们再继续下一部分生命周期与
+   step 分布。
+
+  第一部分：核心概念与关系
+
+  1. Agent
+
+  Agent 是一个完整主体，不是某个 LLM 调用器。
+
+  它包含：
+
+  Agent
+  ├── identity / guidance
+  ├── AgentRunner
+  ├── StepRegistry
+  ├── Middleware
+  ├── ToolRegistry
+  ├── Memory interface
+  ├── Skill interface
+  ├── SessionStore
+  └── Workspace
+
+  Agent 的本质定义可以是：
+
+  ▎ Agent 是一个围绕输入运行固定生命周期、通过模型决策和工具行动推进任务，并在会
+  ▎ 话时间线上沉淀上下文状态的运行主体。
+
+  ---
+  2. Session
+
+  Session 是长期会话容器，表示用户可感知的一次连续工作上下文。
+
+  Session
+  ├── session_id
+  ├── title
+  ├── active_branch_id
+  ├── created_at / updated_at
+  └── metadata / stats
+
+  Session 不直接等于线性消息历史；它更像一个容器，内部可以有多条 branch。
+
+  ---
+  3. Branch
+
+  Branch 是 Session 内的一条上下文时间线。
+
+  Session
+  └── Branch*
+      ├── parent_branch_id
+      ├── fork_checkpoint_id
+      ├── base_message_cursor
+      ├── resume_head
+      └── messages / runs / checkpoints
+
+  正常对话追加到 active branch。
+
+  Rewind 时不删除旧历史，而是：
+
+  从某个 user_message_committed checkpoint 创建新 branch
+
+  ---
+  4. AgentRun
+
+  AgentRun 是 Agent 响应一次输入的完整运行事务。
+
+  Session
+  └── Branch
+      └── AgentRun*
+
+  一次 AgentRun 包含：
+
+  - 一次输入
+  - 一个 RunContext
+  - 一个固定生命周期
+  - 多轮 ReActIteration
+  - 最终 completed / failed / interrupted 状态
+
+  AgentRun 是生命周期边界。
+
+  ---
+  5. ReActIteration
+
+  ReActIteration 是 AgentRun 内的一轮模型决策与可选工具行动。
+
+  AgentRun
+  └── ReActIteration*
+      ├── before_model
+      ├── model_call
+      ├── after_model
+      ├── before_tool?
+      ├── tool_call?
+      └── after_tool?
+
+  如果模型没有 tool_calls，则本轮产生最终回复，AgentRun 进入 after_agent。
+
+  ---
+  6. Checkpoint
+
+  Checkpoint 是 branch 时间线上的恢复边界，但分两类语义。
+
+  Checkpoint
+  ├── user snapshot checkpoint
+  └── runtime checkpoint
+
+  用户可见 checkpoint
+
+  第一版只有：
+
+  user_message_committed
+
+  用于 rewind。
+
+  Rewind 语义：
+
+  rewind(checkpoint)
+    → 从该 user message checkpoint 创建新 branch
+    → 新 branch 上下文包含该 user message
+    → 不包含它之后的 assistant/tool 结果
+
+  内部 runtime checkpoint
+
+  用于恢复诊断和避免重复副作用，例如：
+
+  model_call_started
+  model_call_completed
+  assistant_message_committed
+  tool_call_started
+  tool_call_completed
+  tool_results_committed
+  run_completed
+  run_failed
+  run_interrupted
+
+  它们默认不作为用户 rewind 点。
+
+  ---
+  7. Resume 与 Rewind
+
+  resume:
+    恢复 active branch 最新完整运行结果。
+
+  也就是恢复到最近的 run_completed 对应状态，用于“接着聊”。
+
+  rewind:
+    回到某个 user_message_committed checkpoint，并创建新 branch。
+
+  用于“从某次用户输入处重新开始”。
+
+  ---
+  8. 多 Agent
+
+  多 Agent 不采用子 Agent 从属模型，而是 A2A 对等交互：
+
+  Agent A ←A2A Protocol→ Agent B
+
+  每个 Agent 都是完整 Agent。A2A
+  后续作为协议能力接入，不进入第一版核心生命周期。
+
+  ---
+  这一部分你看是否准确？如果准确，我继续呈现第二部分：固定八段生命周期与每段 
+  step 分布。
+
+✻ Crunched for 33s
+
+❯ 准确                                                                          
+
+⏺ 好，进入第二部分：固定八段生命周期与 step 分布。
+
+  第二部分：Lifecycle / Step / Action
+
+  1. 基本规则
+
+  L-Agent 第一版生命周期固定，不通过配置增删阶段。
+
+  AgentRun
+  ├── before_agent
+  ├── ReActIteration*
+  │   ├── before_model
+  │   ├── model_call
+  │   ├── after_model
+  │   ├── before_tool?
+  │   ├── tool_call?
+  │   └── after_tool?
+  └── after_agent
+
+  其中：
+
+  - before_agent / after_agent 是 run 级阶段，每次 AgentRun 只执行一次。
+  - before_model / model_call / after_model 是 iteration 级阶段，每轮 ReAct
+  都执行。
+  - before_tool / tool_call / after_tool 只有模型返回 tool_calls 时执行。
+  - Hook Phase 固定，Phase 内部的 Step 可注册、启用、禁用、调参、排序。
+  - model_call 和 tool_call 是固定 Action + Middleware，不作为普通 step。
+
+  ---
+  2. RunContext 与 ModelContext
+
+  一次 AgentRun 有一个全局可变 RunContext。
+
+  RunContext
+  ├── session / branch / run
+  ├── input
+  ├── base_model_context
+  ├── iterations
+  ├── current_model_request
+  ├── current_model_response
+  ├── current_tool_plan
+  ├── current_tool_results
+  ├── final_result
+  ├── errors
+  └── runtime state
+
+  模型上下文拆为两层：
+
+  BaseModelContext  # run 级不变部分
+  ModelRequest      # iteration 级动态请求
+
+  BaseModelContext 在 before_agent 构建：
+
+  identity
+  guidance
+  workspace static context
+  normalized user input metadata
+  memory.prefetch result
+  available tools snapshot
+  model config
+
+  ModelRequest 在每轮 before_model 构建：
+
+  base_model_context
+  visible messages
+  compression/budget prepared context
+  available tools
+  current model params
+
+  ---
+  3. before_agent
+
+  职责：
+
+  ▎ 创建本次 AgentRun 的运行边界，提交用户输入 checkpoint，并准备本次 run 
+  ▎ 内不变的 base model context。
+
+  Steps：
+
+  before_agent:
+    - run.create
+    - branch.resolve_active
+    - context.initialize
+    - input.normalize
+    - message.commit_user
+    - checkpoint.create_user_snapshot
+    - base_context.load_static_parts
+    - memory.prefetch
+    - tools.snapshot_available_tools
+    - budget.initialize
+
+  说明：
+
+  - message.commit_user 和 checkpoint.create_user_snapshot 共同形成用户可见
+  rewind 边界。
+  - memory.prefetch 只在 run 开始时做一次，基于本次输入召回 run 级记忆。
+  - tools.snapshot_available_tools 只在 run 开始时确定本次 run 可用工具集合。
+  - 不在第一版做每轮 memory refresh 或 dynamic tool filtering。
+
+  ---
+  4. before_model
+
+  职责：
+
+  ▎ 为当前 ReActIteration 构建一次具体的 ModelRequest。
+
+  Steps：
+
+  before_model:
+    - iteration.create
+    - messages.collect_visible
+    - context.prepare_with_budget
+    - model_request.compose
+
+  说明：
+
+  - messages.collect_visible 从当前 branch 时间线收集本轮可见 messages。
+  - context.prepare_with_budget
+  负责保证上下文符合模型窗口，但具体压缩策略后续单独设计。
+  - model_request.compose 合并 base context、visible messages、tools snapshot
+  和模型参数。
+  - 预算是否允许调用模型不放这里，而放到 model_call middleware。
+
+  ---
+  5. model_call
+
+  职责：
+
+  ▎ 执行一次模型调用，并由 middleware 控制调用边界。
+
+  结构：
+
+  model_call:
+    middleware:
+      - budget.guard
+      - timeout.guard
+      - trace.record
+    action:
+      - llm.call
+
+  AgentRunner 自动记录 runtime checkpoint：
+
+  model_call_started
+  model_call_completed
+  model_call_failed
+
+  说明：
+
+  - budget.guard 控制 ReAct 最大轮数 / 模型调用预算。
+  - timeout.guard 控制模型调用超时。
+  - trace.record 记录耗时、usage、请求元信息。
+  - llm.call 使用 ctx.current_model_request，写入 ctx.current_model_response。
+
+  ---
+  6. after_model
+
+  职责：
+
+  ▎ 把模型响应解释为 AgentRun 状态变化。
+
+  Steps：
+
+  after_model:
+    - model.capture_response
+    - message.commit_assistant
+    - usage.update
+    - result.detect_final_answer
+    - tool.detect_requested
+
+  内部 runtime checkpoint：
+
+  assistant_message_committed
+
+  说明：
+
+  - 即使 assistant message 包含 tool_calls，也必须进入 message timeline。
+  - 如果没有 tool_calls，则 result.detect_final_answer 设置
+  ctx.final_result，本次 ReAct loop 准备结束。
+  - 如果有 tool_calls，则 tool.detect_requested 标记进入工具段。
+
+  ---
+  7. before_tool
+
+  职责：
+
+  ▎ 把模型请求的 tool_calls 转换成可执行、可审计、可安全处理的 ToolPlan。
+
+  Steps：
+
+  before_tool:
+    - tool_calls.extract
+    - tool_calls.parse_arguments
+    - tool_calls.validate_schema
+    - tool_calls.resolve_tools
+    - tool_plan.build_serial
+    - approval.prepare_requests
+
+  说明：
+
+  - before_tool 做计划级解析与校验。
+  - ToolDispatcher 仍做最终防御性校验。
+  - 第一版工具执行保持全串行，不做 parallel_safe。
+  - approval.prepare_requests 只准备审批上下文，不真正执行审批阻断。
+
+  ---
+  8. tool_call
+
+  职责：
+
+  ▎ 按 ToolPlan 串行执行工具，或在审批拒绝时生成拒绝类 tool result。
+
+  结构：
+
+  tool_call:
+    middleware:
+      - approval.guard
+      - audit.record
+      - result_limit.guard
+    action:
+      - tools.dispatch_serial
+
+  AgentRunner 自动记录 runtime checkpoint：
+
+  tool_call_started
+  tool_call_completed
+  tool_call_failed
+
+  说明：
+
+  - approval.guard 真正决定放行或拒绝。
+  - 如果用户拒绝或策略拒绝，不终止 AgentRun，而是生成 denied tool result。
+  - audit.record 记录工具执行审计。
+  - result_limit.guard 统一限制工具结果大小。
+  - tools.dispatch_serial 按 ToolPlan 顺序执行，并做最终防御校验。
+
+  ---
+  9. after_tool
+
+  职责：
+
+  ▎ 把工具执行结果提交为下一轮 ReAct 可见的 observation。
+
+  Steps：
+
+  after_tool:
+    - tool_results.capture
+    - message.commit_tool_results
+    - checkpoint.record_tool_results_committed
+
+  说明：
+
+  - 每个 tool result 都写成 role=tool message，并保留 tool_call_id。
+  - tool_results_committed 是内部 runtime checkpoint，不是用户 rewind 点。
+  - 不在 after_tool 做上下文压缩；压缩/裁剪放到下一轮 before_model。
+
+  ---
+  10. after_agent
+
+  职责：
+
+  ▎ 结束本次 AgentRun，提交 run 级状态，并更新 resume 所需的 branch head。
+
+  Steps：
+
+  after_agent:
+    - result.finalize
+    - run.mark_terminal_state
+    - checkpoint.record_run_terminal_state
+    - branch.update_resume_head
+    - stats.update_session
+    - cleanup.release_runtime_state
+
+  说明：
+
+  - branch.update_resume_head 只在 run completed 时更新。
+  - resume 恢复 active branch 最新完整运行结果。
+  - 第一版不在 after_agent 自动执行 memory.sync。
+  - 持久化记忆管理机制后续单独设计。
+  - 上下文压缩策略也后续单独设计。
+
+  ---
+  这一部分你看是否准确？如果准确，我继续呈现第三部分：配置、注册与实现推进边界。
+✻ Cooked for 35s
+
+❯ 准确                                                                          
+
+⏺ 好，进入第三部分：配置、注册与实现推进边界。
+
+  第三部分：配置、注册与扩展边界
+
+  1. 生命周期固定，Step 可扩展
+
+  L-Agent 第一版不把生命周期本身做成可配置项。
+
+  固定生命周期是 Agent 的语义骨架：
+
+  before_agent
+  before_model
+  model_call
+  after_model
+  before_tool
+  tool_call
+  after_tool
+  after_agent
+
+  可扩展的是每个 Hook Phase 内部的 Step：
+
+  Hook Phase = 固定生命周期阶段
+  Step       = 阶段内部的可插拔能力模块
+
+  ---
+  2. Step 使用类接口
+
+  Step 第一版采用类接口式：
+
+  class Step:
+      name: str
+      phase: HookPhase
+
+      def run(self, ctx: RunContext) -> None:
+          ...
+
+  例如：
+
+  class MemoryPrefetchStep:
+      name = "memory.prefetch"
+      phase = "before_agent"
+
+      def run(self, ctx: RunContext) -> None:
+          ...
+
+  第一版不做复杂 depends_on / config_schema / plugin 
+  metadata，但保留后续扩展空间。
+
+  ---
+  3. Step Registry
+
+  StepRegistry 负责：
+
+  - 注册 Step
+  - 按 phase 收集 Step
+  - 按配置启用/禁用 Step
+  - 按配置调整 Step 顺序
+  - 为 AgentRunner 提供 phase -> steps
+
+  概念上：
+
+  StepRegistry
+  ├── register(step)
+  ├── get_steps(phase)
+  └── configure(config)
+
+  ---
+  4. 配置策略
+
+  你选择的是偏 A 的方式：
+
+  ▎ 代码注册为主，配置只控制 Step 的行为。
+
+  所以第一版配置不负责重写生命周期。
+
+  配置只做：
+
+  - Step enabled / disabled
+  - Step 参数
+  - Step 局部顺序
+
+  例如：
+
+  steps:
+    memory.prefetch:
+      enabled: true
+      limit: 5
+
+    tools.snapshot_available_tools:
+      enabled: true
+
+    context.prepare_with_budget:
+      strategy: simple
+
+  是否允许配置调整 step 顺序，可以分阶段：
+
+  第一阶段：
+    只支持 enabled 和参数。
+
+  第二阶段：
+    支持 order / before / after。
+
+  第三阶段：
+    支持外部插件注册新 step。
+
+  ---
+  5. Action 与 Middleware
+
+  model_call 和 tool_call 不作为普通 Step。
+
+  它们是固定 Action，由 middleware 包裹。
+
+  Action:
+    - llm.call
+    - tools.dispatch_serial
+
+  Middleware 第一版可以采用轻量接口：
+
+  class Middleware:
+      name: str
+      target: ActionName
+
+      def __call__(self, ctx: RunContext, next_call: Callable) -> Any:
+          ...
+
+  默认：
+
+  model_call middleware:
+    - budget.guard
+    - timeout.guard
+    - trace.record
+
+  tool_call middleware:
+    - approval.guard
+    - audit.record
+    - result_limit.guard
+
+  配置也只控制 middleware 的启停和参数，不改变 action 本身。
+
+  ---
+  6. AgentRunner
+
+  AgentRunner 是一次 AgentRun 的流程推进器。
+
+  职责：
+
+  - 创建并持有 RunContext
+  - 执行 before_agent
+  - 驱动 ReAct loop
+  - 执行 before_model / model_call / after_model
+  - 有 tool_calls 时执行 before_tool / tool_call / after_tool
+  - 执行 after_agent
+  - 自动记录 action 边界 runtime checkpoint
+  - 根据 ctx.final_result / tool_calls / errors 判断流程走向
+
+  AgentRunner 不负责具体业务：
+
+  不直接做 memory
+  不直接做 tool parsing
+  不直接做 compression
+  不直接做 persistence details
+
+  这些都由 Step、Action、Middleware 或 Store 完成。
+
+  ---
+  7. 存储与时间线边界
+
+  第一版核心存储概念：
+
+  sessions
+  branches
+  agent_runs
+  react_iterations
+  messages
+  checkpoints
+
+  但当前设计阶段不展开事务细节。
+
+  只保留语义要求：
+
+  Session:
+    会话容器
+
+  Branch:
+    上下文时间线
+
+  AgentRun:
+    一次输入到输出的运行事务
+
+  ReActIteration:
+    一轮模型决策和可选工具行动
+
+  Message:
+    conversation timeline 的事实记录
+
+  Checkpoint:
+    恢复边界
+
+  关键规则：
+
+  resume:
+    使用 active branch 最新完整 run 状态。
+
+  rewind:
+    使用 user_message_committed checkpoint 创建新 branch。
+
+  user_message_committed:
+    第一版唯一用户可见 checkpoint。
+
+  runtime checkpoints:
+    用于内部恢复、诊断和副作用安全判断。
+
+  ---
+  8. 暂不进入第一版细节的内容
+
+  以下内容后续单独设计：
+
+  - 持久化记忆管理机制
+  - 上下文压缩具体策略
+  - A2A 多 Agent 协议
+  - Step 插件生态
+  - 工具并行调度
+  - 复杂事务与恢复修复策略
+
+  它们在第一版设计里只保留清晰边界，不展开实现。
+
+  ---
+  这一部分你看是否准确？如果准确，我下一步可以把三部分整合成一份完整设计草案，写
+  到你指定的 L-Agent 设计文件中。
+
+✻ Cooked for 26s
+
+❯ 准确                                                                          
+
+⏺ 三部分都确认后，我会把这版宏观设计整理进 L-Agent/design，再做一次简短自检。
+
+⏺ Write(L-Agent/design)
+  ⎿  Added 685 lines, removed 20 lines
+        1 - Agent:                                                       
+        2 -    - interact session                                        
+        3 -        - user                                                
+        4 -        - other Agent                                         
+        5 -    - Agent Loop                                              
+        6 -        - before Agent                                        
+        7 -        - before model                                        
+        8 -        - llm call                                            
+        9 -        - after model                                         
+       10 -        - after Agent                                         
+       11 -    - workspace                                               
+       12 -        - knowledge                                           
+       13 -            - profile                                         
+       14 -            - memory                                          
+       15 -            - skills                                          
+       16 -        - tools                                               
+       17 -            - bash                                            
+       18 -            - mcp                                             
+       19 -            - acp                                             
+       20 -        - task                                                
+        1   No newline at end of file
+        2 +# L-Agent 第一版宏观设计                                      
+        3 +                                                              
+        4 +> L-Agent 是 F-Agent 2.0 重构版：保留本地 CLI 个人 Agent 的定 
+          +位，但重新抽象 Agent 的运行生命周期、Step 扩展边界，以及 Sessi
+          +on / Branch / Checkpoint 时间线模型。                         
+        5 +                                                              
+        6 +## 1. 设计定位                                                
+        7 +                                                              
+        8 +L-Agent 不以通用 Agent Framework 或多端产品平台为第一目标。第 
+          +一版目标是：                                                  
+        9 +                                                              
+       10 +- 将 F-Agent 中偏重的 AgentLoop 拆解为清晰的运行内核。        
+       11 +- 用固定生命周期表达 AgentRun 的运行语义。                    
+       12 +- 让生命周期阶段内的 Step 可插拔、可扩展、可测试。            
+       13 +- 用 Branch / Checkpoint 支撑类似 Claude Code 的 resume 和 rew
+          +ind 能力。                                                    
+       14 +- 为后续持久化记忆、上下文压缩、A2A 多 Agent 协议预留边界，但 
+          +不在第一版展开。                                              
+       15 +                                                              
+       16 +核心方向采用统一内核方案：                                    
+       17 +                                                              
+       18 +```text                                                       
+       19 +AgentRunner                                                   
+       20 +固定八段 Lifecycle                                            
+       21 +Step Registry                                                 
+       22 +Action Middleware                                             
+       23 +RunContext                                                    
+       24 +Session / Branch / AgentRun / ReActIteration                  
+       25 +Checkpoint                                                    
+       26 +```                                                           
+       27 +                                                              
+       28 +## 2. 核心概念                                                
+       29 +                                                              
+       30 +### 2.1 Agent                                                 
+       31 +                                                              
+       32 +Agent 是一个完整运行主体，不只是一次 LLM 调用器。             
+       33 +                                                              
+       34 +```text                                                       
+       35 +Agent                                                         
+       36 +├── identity / guidance                                       
+       37 +├── AgentRunner                                               
+       38 +├── StepRegistry                                              
+       39 +├── Middleware                                                
+       40 +├── ToolRegistry                                              
+       41 +├── Memory interface                                          
+       42 +├── Skill interface                                           
+       43 +├── SessionStore                                              
+       44 +└── Workspace                                                 
+       45 +```                                                           
+       46 +                                                              
+       47 +定义：                                                        
+       48 +                                                              
+       49 +> Agent 是一个围绕输入运行固定生命周期、通过模型决策和工具行动
+          +推进任务，并在会话时间线上沉淀上下文状态的运行主体。          
+       50 +                                                              
+       51 +### 2.2 Session                                               
+       52 +                                                              
+       53 +Session 是长期会话容器，表示用户可感知的一次连续工作上下文。  
+       54 +                                                              
+       55 +```text                                                       
+       56 +Session                                                       
+       57 +├── session_id                                                
+       58 +├── title                                                     
+       59 +├── active_branch_id                                          
+       60 +├── created_at / updated_at                                   
+       61 +└── metadata / stats                                          
+       62 +```                                                           
+       63 +                                                              
+       64 +Session 不直接等于一条线性消息历史；它更像一个容器，内部可以有
+          +多条 Branch。                                                 
+       65 +                                                              
+       66 +### 2.3 Branch                                                
+       67 +                                                              
+       68 +Branch 是 Session 内的一条上下文时间线。                      
+       69 +                                                              
+       70 +```text                                                       
+       71 +Session                                                       
+       72 +└── Branch*                                                   
+       73 +    ├── parent_branch_id                                      
+       74 +    ├── fork_checkpoint_id                                    
+       75 +    ├── base_message_cursor                                   
+       76 +    ├── resume_head                                           
+       77 +    └── messages / runs / checkpoints                         
+       78 +```                                                           
+       79 +                                                              
+       80 +正常对话追加到 active branch。Rewind 不删除旧历史，而是从某个 
+          +`user_message_committed` checkpoint 创建新 branch。           
+       81 +                                                              
+       82 +### 2.4 AgentRun                                              
+       83 +                                                              
+       84 +AgentRun 是 Agent 响应一次输入的完整运行事务。                
+       85 +                                                              
+       86 +```text                                                       
+       87 +Session                                                       
+       88 +└── Branch                                                    
+       89 +    └── AgentRun*                                             
+       90 +```                                                           
+       91 +                                                              
+       92 +一次 AgentRun 包含：                                          
+       93 +                                                              
+       94 +- 一次输入                                                    
+       95 +- 一个 RunContext                                             
+       96 +- 一个固定生命周期                                            
+       97 +- 多轮 ReActIteration                                         
+       98 +- 最终 completed / failed / interrupted 状态                  
+       99 +                                                              
+      100 +AgentRun 是生命周期边界。                                     
+      101 +                                                              
+      102 +### 2.5 ReActIteration                                        
+      103 +                                                              
+      104 +ReActIteration 是 AgentRun 内的一轮模型决策与可选工具行动。   
+      105 +                                                              
+      106 +```text                                                       
+      107 +AgentRun                                                      
+      108 +└── ReActIteration*                                           
+      109 +    ├── before_model                                          
+      110 +    ├── model_call                                            
+      111 +    ├── after_model                                           
+      112 +    ├── before_tool?                                          
+      113 +    ├── tool_call?                                            
+      114 +    └── after_tool?                                           
+      115 +```                                                           
+      116 +                                                              
+      117 +如果模型没有 tool_calls，则本轮产生最终回复，AgentRun 进入 `af
+          +ter_agent`。                                                  
+      118 +                                                              
+      119 +### 2.6 Checkpoint                                            
+      120 +                                                              
+      121 +Checkpoint 是 Branch 时间线上的恢复边界，分为两类语义。       
+      122 +                                                              
+      123 +```text                                                       
+      124 +Checkpoint                                                    
+      125 +├── user snapshot checkpoint                                  
+      126 +└── runtime checkpoint                                        
+      127 +```                                                           
+      128 +                                                              
+      129 +第一版唯一用户可见 checkpoint：                               
+      130 +                                                              
+      131 +```text                                                       
+      132 +user_message_committed                                        
+      133 +```                                                           
+      134 +                                                              
+      135 +它用于 rewind。                                               
+      136 +                                                              
+      137 +Runtime checkpoint 默认不作为用户 rewind 点，只用于内部恢复、 
+          +诊断和副作用安全判断，例如：                                  
+      138 +                                                              
+      139 +```text                                                       
+      140 +model_call_started                                            
+      141 +model_call_completed                                          
+      142 +assistant_message_committed                                   
+      143 +tool_call_started                                             
+      144 +tool_call_completed                                           
+      145 +tool_results_committed                                        
+      146 +run_completed                                                 
+      147 +run_failed                                                    
+      148 +run_interrupted                                               
+      149 +```                                                           
+      150 +                                                              
+      151 +### 2.7 Resume 与 Rewind                                      
+      152 +                                                              
+      153 +Resume：                                                      
+      154 +                                                              
+      155 +```text                                                       
+      156 +恢复 active branch 最新完整运行结果。                         
+      157 +```                                                           
+      158 +                                                              
+      159 +也就是恢复到最近的 `run_completed` 对应状态，用于“接着聊”。   
+      160 +                                                              
+      161 +Rewind：                                                      
+      162 +                                                              
+      163 +```text                                                       
+      164 +回到某个 user_message_committed checkpoint，并创建新 branch。 
+      165 +```                                                           
+      166 +                                                              
+      167 +Rewind 后，新 branch 上下文包含该 user message，但不包含它之后
+          +的 assistant/tool 结果。                                      
+      168 +                                                              
+      169 +### 2.8 多 Agent                                              
+      170 +                                                              
+      171 +多 Agent 不采用子 Agent 从属模型，而是 A2A 对等交互：         
+      172 +                                                              
+      173 +```text                                                       
+      174 +Agent A ←A2A Protocol→ Agent B                                
+      175 +```                                                           
+      176 +                                                              
+      177 +每个 Agent 都是完整 Agent。A2A 后续作为协议能力接入，不进入第 
+          +一版核心生命周期。                                            
+      178 +                                                              
+      179 +## 3. 固定八段生命周期                                        
+      180 +                                                              
+      181 +L-Agent 第一版生命周期固定，不通过配置增删阶段。              
+      182 +                                                              
+      183 +```text                                                       
+      184 +AgentRun                                                      
+      185 +├── before_agent                                              
+      186 +├── ReActIteration*                                           
+      187 +│   ├── before_model                                          
+      188 +│   ├── model_call                                            
+      189 +│   ├── after_model                                           
+      190 +│   ├── before_tool?                                          
+      191 +│   ├── tool_call?                                            
+      192 +│   └── after_tool?                                           
+      193 +└── after_agent                                               
+      194 +```                                                           
+      195 +                                                              
+      196 +规则：                                                        
+      197 +                                                              
+      198 +- `before_agent` / `after_agent` 是 run 级阶段，每次 AgentRun 
+          +只执行一次。                                                  
+      199 +- `before_model` / `model_call` / `after_model` 是 iteration  
+          +级阶段，每轮 ReAct 都执行。                                   
+      200 +- `before_tool` / `tool_call` / `after_tool` 只有模型返回 tool
+          +_calls 时执行。                                               
+      201 +- Hook Phase 固定，Phase 内部的 Step 可注册、启用、禁用、调参 
+          +、排序。                                                      
+      202 +- `model_call` 和 `tool_call` 是固定 Action + Middleware，不作
+          +为普通 Step。                                                 
+      203 +                                                              
+      204 +## 4. RunContext 与模型上下文                                 
+      205 +                                                              
+      206 +一次 AgentRun 有一个全局可变 RunContext。                     
+      207 +                                                              
+      208 +```text                                                       
+      209 +RunContext                                                    
+      210 +├── session / branch / run                                    
+      211 +├── input                                                     
+      212 +├── base_model_context                                        
+      213 +├── iterations                                                
+      214 +├── current_model_request                                     
+      215 +├── current_model_response                                    
+      216 +├── current_tool_plan                                         
+      217 +├── current_tool_results                                      
+      218 +├── final_result                                              
+      219 +├── errors                                                    
+      220 +└── runtime state                                             
+      221 +```                                                           
+      222 +                                                              
+      223 +模型上下文拆为两层：                                          
+      224 +                                                              
+      225 +```text                                                       
+      226 +BaseModelContext  # run 级不变部分                            
+      227 +ModelRequest      # iteration 级动态请求                      
+      228 +```                                                           
+      229 +                                                              
+      230 +`BaseModelContext` 在 `before_agent` 构建：                   
+      231 +                                                              
+      232 +```text                                                       
+      233 +identity                                                      
+      234 +guidance                                                      
+      235 +workspace static context                                      
+      236 +normalized user input metadata                                
+      237 +memory.prefetch result                                        
+      238 +available tools snapshot                                      
+      239 +model config                                                  
+      240 +```                                                           
+      241 +                                                              
+      242 +`ModelRequest` 在每轮 `before_model` 构建：                   
+      243 +                                                              
+      244 +```text                                                       
+      245 +base_model_context                                            
+      246 +visible messages                                              
+      247 +compression/budget prepared context                           
+      248 +available tools                                               
+      249 +current model params                                          
+      250 +```                                                           
+      251 +                                                              
+      252 +## 5. 各阶段 Step 分布                                        
+      253 +                                                              
+      254 +### 5.1 before_agent                                          
+      255 +                                                              
+      256 +职责：                                                        
+      257 +                                                              
+      258 +> 创建本次 AgentRun 的运行边界，提交用户输入 checkpoint，并准 
+          +备本次 run 内不变的 base model context。                      
+      259 +                                                              
+      260 +Steps：                                                       
+      261 +                                                              
+      262 +```text                                                       
+      263 +before_agent:                                                 
+      264 +  - run.create                                                
+      265 +  - branch.resolve_active                                     
+      266 +  - context.initialize                                        
+      267 +  - input.normalize                                           
+      268 +  - message.commit_user                                       
+      269 +  - checkpoint.create_user_snapshot                           
+      270 +  - base_context.load_static_parts                            
+      271 +  - memory.prefetch                                           
+      272 +  - tools.snapshot_available_tools                            
+      273 +  - budget.initialize                                         
+      274 +```                                                           
+      275 +                                                              
+      276 +说明：                                                        
+      277 +                                                              
+      278 +- `message.commit_user` 和 `checkpoint.create_user_snapshot`  
+          +共同形成用户可见 rewind 边界。                                
+      279 +- `memory.prefetch` 只在 run 开始时做一次，基于本次输入召回 ru
+          +n 级记忆。                                                    
+      280 +- `tools.snapshot_available_tools` 只在 run 开始时确定本次 run
+          + 可用工具集合。                                               
+      281 +- 第一版不做每轮 memory refresh 或 dynamic tool filtering。   
+      282 +                                                              
+      283 +### 5.2 before_model                                          
+      284 +                                                              
+      285 +职责：                                                        
+      286 +                                                              
+      287 +> 为当前 ReActIteration 构建一次具体的 ModelRequest。         
+      288 +                                                              
+      289 +Steps：                                                       
+      290 +                                                              
+      291 +```text                                                       
+      292 +before_model:                                                 
+      293 +  - iteration.create                                          
+      294 +  - messages.collect_visible                                  
+      295 +  - context.prepare_with_budget                               
+      296 +  - model_request.compose                                     
+      297 +```                                                           
+      298 +                                                              
+      299 +说明：                                                        
+      300 +                                                              
+      301 +- `messages.collect_visible` 从当前 Branch 时间线收集本轮可见 
+          +messages。                                                    
+      302 +- `context.prepare_with_budget` 负责保证上下文符合模型窗口，但
+          +具体压缩策略后续单独设计。                                    
+      303 +- `model_request.compose` 合并 base context、visible messages 
+          +、tools snapshot 和模型参数。                                 
+      304 +- 预算是否允许调用模型不放这里，而放到 `model_call` middleware
+          +。                                                            
+      305 +                                                              
+      306 +### 5.3 model_call                                            
+      307 +                                                              
+      308 +职责：                                                        
+      309 +                                                              
+      310 +> 执行一次模型调用，并由 middleware 控制调用边界。            
+      311 +                                                              
+      312 +结构：                                                        
+      313 +                                                              
+      314 +```text                                                       
+      315 +model_call:                                                   
+      316 +  middleware:                                                 
+      317 +    - budget.guard                                            
+      318 +    - timeout.guard                                           
+      319 +    - trace.record                                            
+      320 +  action:                                                     
+      321 +    - llm.call                                                
+      322 +```                                                           
+      323 +                                                              
+      324 +AgentRunner 自动记录 runtime checkpoint：                     
+      325 +                                                              
+      326 +```text                                                       
+      327 +model_call_started                                            
+      328 +model_call_completed                                          
+      329 +model_call_failed                                             
+      330 +```                                                           
+      331 +                                                              
+      332 +说明：                                                        
+      333 +                                                              
+      334 +- `budget.guard` 控制 ReAct 最大轮数 / 模型调用预算。         
+      335 +- `timeout.guard` 控制模型调用超时。                          
+      336 +- `trace.record` 记录耗时、usage、请求元信息。                
+      337 +- `llm.call` 使用 `ctx.current_model_request`，写入 `ctx.curre
+          +nt_model_response`。                                          
+      338 +                                                              
+      339 +### 5.4 after_model                                           
+      340 +                                                              
+      341 +职责：                                                        
+      342 +                                                              
+      343 +> 把模型响应解释为 AgentRun 状态变化。                        
+      344 +                                                              
+      345 +Steps：                                                       
+      346 +                                                              
+      347 +```text                                                       
+      348 +after_model:                                                  
+      349 +  - model.capture_response                                    
+      350 +  - message.commit_assistant                                  
+      351 +  - usage.update                                              
+      352 +  - result.detect_final_answer                                
+      353 +  - tool.detect_requested                                     
+      354 +```                                                           
+      355 +                                                              
+      356 +内部 runtime checkpoint：                                     
+      357 +                                                              
+      358 +```text                                                       
+      359 +assistant_message_committed                                   
+      360 +```                                                           
+      361 +                                                              
+      362 +说明：                                                        
+      363 +                                                              
+      364 +- 即使 assistant message 包含 tool_calls，也必须进入 message t
+          +imeline。                                                     
+      365 +- 如果没有 tool_calls，则 `result.detect_final_answer` 设置 `c
+          +tx.final_result`，本次 ReAct loop 准备结束。                  
+      366 +- 如果有 tool_calls，则 `tool.detect_requested` 标记进入工具段
+          +。                                                            
+      367 +                                                              
+      368 +### 5.5 before_tool                                           
+      369 +                                                              
+      370 +职责：                                                        
+      371 +                                                              
+      372 +> 把模型请求的 tool_calls 转换成可执行、可审计、可安全处理的 T
+          +oolPlan。                                                     
+      373 +                                                              
+      374 +Steps：                                                       
+      375 +                                                              
+      376 +```text                                                       
+      377 +before_tool:                                                  
+      378 +  - tool_calls.extract                                        
+      379 +  - tool_calls.parse_arguments                                
+      380 +  - tool_calls.validate_schema                                
+      381 +  - tool_calls.resolve_tools                                  
+      382 +  - tool_plan.build_serial                                    
+      383 +  - approval.prepare_requests                                 
+      384 +```                                                           
+      385 +                                                              
+      386 +说明：                                                        
+      387 +                                                              
+      388 +- before_tool 做计划级解析与校验。                            
+      389 +- ToolDispatcher 仍做最终防御性校验。                         
+      390 +- 第一版工具执行保持全串行，不做 parallel_safe。              
+      391 +- `approval.prepare_requests` 只准备审批上下文，不真正执行审批
+          +阻断。                                                        
+      392 +                                                              
+      393 +### 5.6 tool_call                                             
+      394 +                                                              
+      395 +职责：                                                        
+      396 +                                                              
+      397 +> 按 ToolPlan 串行执行工具，或在审批拒绝时生成拒绝类 tool resu
+          +lt。                                                          
+      398 +                                                              
+      399 +结构：                                                        
+      400 +                                                              
+      401 +```text                                                       
+      402 +tool_call:                                                    
+      403 +  middleware:                                                 
+      404 +    - approval.guard                                          
+      405 +    - audit.record                                            
+      406 +    - result_limit.guard                                      
+      407 +  action:                                                     
+      408 +    - tools.dispatch_serial                                   
+      409 +```                                                           
+      410 +                                                              
+      411 +AgentRunner 自动记录 runtime checkpoint：                     
+      412 +                                                              
+      413 +```text                                                       
+      414 +tool_call_started                                             
+      415 +tool_call_completed                                           
+      416 +tool_call_failed                                              
+      417 +```                                                           
+      418 +                                                              
+      419 +说明：                                                        
+      420 +                                                              
+      421 +- `approval.guard` 真正决定放行或拒绝。                       
+      422 +- 如果用户拒绝或策略拒绝，不终止 AgentRun，而是生成 denied too
+          +l result。                                                    
+      423 +- `audit.record` 记录工具执行审计。                           
+      424 +- `result_limit.guard` 统一限制工具结果大小。                 
+      425 +- `tools.dispatch_serial` 按 ToolPlan 顺序执行，并做最终防御校
+          +验。                                                          
+      426 +                                                              
+      427 +### 5.7 after_tool                                            
+      428 +                                                              
+      429 +职责：                                                        
+      430 +                                                              
+      431 +> 把工具执行结果提交为下一轮 ReAct 可见的 observation。       
+      432 +                                                              
+      433 +Steps：                                                       
+      434 +                                                              
+      435 +```text                                                       
+      436 +after_tool:                                                   
+      437 +  - tool_results.capture                                      
+      438 +  - message.commit_tool_results                               
+      439 +  - checkpoint.record_tool_results_committed                  
+      440 +```                                                           
+      441 +                                                              
+      442 +说明：                                                        
+      443 +                                                              
+      444 +- 每个 tool result 都写成 `role=tool` message，并保留 `tool_ca
+          +ll_id`。                                                      
+      445 +- `tool_results_committed` 是内部 runtime checkpoint，不是用户
+          + rewind 点。                                                  
+      446 +- 不在 after_tool 做上下文压缩；压缩/裁剪放到下一轮 `before_mo
+          +del`。                                                        
+      447 +                                                              
+      448 +### 5.8 after_agent                                           
+      449 +                                                              
+      450 +职责：                                                        
+      451 +                                                              
+      452 +> 结束本次 AgentRun，提交 run 级状态，并更新 resume 所需的 bra
+          +nch head。                                                    
+      453 +                                                              
+      454 +Steps：                                                       
+      455 +                                                              
+      456 +```text                                                       
+      457 +after_agent:                                                  
+      458 +  - result.finalize                                           
+      459 +  - run.mark_terminal_state                                   
+      460 +  - checkpoint.record_run_terminal_state                      
+      461 +  - branch.update_resume_head                                 
+      462 +  - stats.update_session                                      
+      463 +  - cleanup.release_runtime_state                             
+      464 +```                                                           
+      465 +                                                              
+      466 +说明：                                                        
+      467 +                                                              
+      468 +- `branch.update_resume_head` 只在 run completed 时更新。     
+      469 +- resume 恢复 active branch 最新完整运行结果。                
+      470 +- 第一版不在 after_agent 自动执行 `memory.sync`。             
+      471 +- 持久化记忆管理机制后续单独设计。                            
+      472 +- 上下文压缩策略后续单独设计。                                
+      473 +                                                              
+      474 +## 6. Step、Registry 与配置                                   
+      475 +                                                              
+      476 +### 6.1 Step 类接口                                           
+      477 +                                                              
+      478 +Step 第一版采用类接口式：                                     
+      479 +                                                              
+      480 +```python                                                     
+      481 +class Step:                                                   
+      482 +    name: str                                                 
+      483 +    phase: HookPhase                                          
+      484 +                                                              
+      485 +    def run(self, ctx: RunContext) -> None:                   
+      486 +        ...                                                   
+      487 +```                                                           
+      488 +                                                              
+      489 +第一版不做复杂 `depends_on / config_schema / plugin metadata` 
+          +，但保留后续扩展空间。                                        
+      490 +                                                              
+      491 +### 6.2 StepRegistry                                          
+      492 +                                                              
+      493 +StepRegistry 负责：                                           
+      494 +                                                              
+      495 +```text                                                       
+      496 +- 注册 Step                                                   
+      497 +- 按 phase 收集 Step                                          
+      498 +- 按配置启用/禁用 Step                                        
+      499 +- 按配置调整 Step 顺序                                        
+      500 +- 为 AgentRunner 提供 phase -> steps                          
+      501 +```                                                           
+      502 +                                                              
+      503 +概念接口：                                                    
+      504 +                                                              
+      505 +```text                                                       
+      506 +StepRegistry                                                  
+      507 +├── register(step)                                            
+      508 +├── get_steps(phase)                                          
+      509 +└── configure(config)                                         
+      510 +```                                                           
+      511 +                                                              
+      512 +### 6.3 配置策略                                              
+      513 +                                                              
+      514 +第一版采用：                                                  
+      515 +                                                              
+      516 +> 代码注册为主，配置只控制 Step 的行为。                      
+      517 +                                                              
+      518 +配置不负责重写生命周期，只做：                                
+      519 +                                                              
+      520 +```text                                                       
+      521 +- Step enabled / disabled                                     
+      522 +- Step 参数                                                   
+      523 +- Step 局部顺序                                               
+      524 +```                                                           
+      525 +                                                              
+      526 +示例：                                                        
+      527 +                                                              
+      528 +```yaml                                                       
+      529 +steps:                                                        
+      530 +  memory.prefetch:                                            
+      531 +    enabled: true                                             
+      532 +    limit: 5                                                  
+      533 +                                                              
+      534 +  tools.snapshot_available_tools:                             
+      535 +    enabled: true                                             
+      536 +                                                              
+      537 +  context.prepare_with_budget:                                
+      538 +    strategy: simple                                          
+      539 +```                                                           
+      540 +                                                              
+      541 +配置能力可以分阶段推进：                                      
+      542 +                                                              
+      543 +```text                                                       
+      544 +第一阶段：只支持 enabled 和参数。                             
+      545 +第二阶段：支持 order / before / after。                       
+      546 +第三阶段：支持外部插件注册新 step。                           
+      547 +```                                                           
+      548 +                                                              
+      549 +## 7. Action 与 Middleware                                    
+      550 +                                                              
+      551 +`model_call` 和 `tool_call` 不作为普通 Step。它们是固定 Action
+          +，由 Middleware 包裹。                                        
+      552 +                                                              
+      553 +```text                                                       
+      554 +Action:                                                       
+      555 +  - llm.call                                                  
+      556 +  - tools.dispatch_serial                                     
+      557 +```                                                           
+      558 +                                                              
+      559 +Middleware 第一版可以采用轻量接口：                           
+      560 +                                                              
+      561 +```python                                                     
+      562 +class Middleware:                                             
+      563 +    name: str                                                 
+      564 +    target: ActionName                                        
+      565 +                                                              
+      566 +    def __call__(self, ctx: RunContext, next_call: Callable) -
+          +> Any:                                                        
+      567 +        ...                                                   
+      568 +```                                                           
+      569 +                                                              
+      570 +默认：                                                        
+      571 +                                                              
+      572 +```text                                                       
+      573 +model_call middleware:                                        
+      574 +  - budget.guard                                              
+      575 +  - timeout.guard                                             
+      576 +  - trace.record                                              
+      577 +                                                              
+      578 +tool_call middleware:                                         
+      579 +  - approval.guard                                            
+      580 +  - audit.record                                              
+      581 +  - result_limit.guard                                        
+      582 +```                                                           
+      583 +                                                              
+      584 +配置只控制 Middleware 的启停和参数，不改变 Action 本身。      
+      585 +                                                              
+      586 +## 8. AgentRunner                                             
+      587 +                                                              
+      588 +AgentRunner 是一次 AgentRun 的流程推进器。                    
+      589 +                                                              
+      590 +职责：                                                        
+      591 +                                                              
+      592 +```text                                                       
+      593 +- 创建并持有 RunContext                                       
+      594 +- 执行 before_agent                                           
+      595 +- 驱动 ReAct loop                                             
+      596 +- 执行 before_model / model_call / after_model                
+      597 +- 有 tool_calls 时执行 before_tool / tool_call / after_tool   
+      598 +- 执行 after_agent                                            
+      599 +- 自动记录 action 边界 runtime checkpoint                     
+      600 +- 根据 ctx.final_result / tool_calls / errors 判断流程走向    
+      601 +```                                                           
+      602 +                                                              
+      603 +AgentRunner 不负责具体业务：                                  
+      604 +                                                              
+      605 +```text                                                       
+      606 +不直接做 memory                                               
+      607 +不直接做 tool parsing                                         
+      608 +不直接做 compression                                          
+      609 +不直接做 persistence details                                  
+      610 +```                                                           
+      611 +                                                              
+      612 +这些都由 Step、Action、Middleware 或 Store 完成。             
+      613 +                                                              
+      614 +## 9. 存储与时间线边界                                        
+      615 +                                                              
+      616 +第一版核心存储概念：                                          
+      617 +                                                              
+      618 +```text                                                       
+      619 +sessions                                                      
+      620 +branches                                                      
+      621 +agent_runs                                                    
+      622 +react_iterations                                              
+      623 +messages                                                      
+      624 +checkpoints                                                   
+      625 +```                                                           
+      626 +                                                              
+      627 +当前设计阶段不展开事务细节，只保留语义要求：                  
+      628 +                                                              
+      629 +```text                                                       
+      630 +Session:                                                      
+      631 +  会话容器                                                    
+      632 +                                                              
+      633 +Branch:                                                       
+      634 +  上下文时间线                                                
+      635 +                                                              
+      636 +AgentRun:                                                     
+      637 +  一次输入到输出的运行事务                                    
+      638 +                                                              
+      639 +ReActIteration:                                               
+      640 +  一轮模型决策和可选工具行动                                  
+      641 +                                                              
+      642 +Message:                                                      
+      643 +  conversation timeline 的事实记录                            
+      644 +                                                              
+      645 +Checkpoint:                                                   
+      646 +  恢复边界                                                    
+      647 +```                                                           
+      648 +                                                              
+      649 +关键规则：                                                    
+      650 +                                                              
+      651 +```text                                                       
+      652 +resume:                                                       
+      653 +  使用 active branch 最新完整 run 状态。                      
+      654 +                                                              
+      655 +rewind:                                                       
+      656 +  使用 user_message_committed checkpoint 创建新 branch。      
+      657 +                                                              
+      658 +user_message_committed:                                       
+      659 +  第一版唯一用户可见 checkpoint。                             
+      660 +                                                              
+      661 +runtime checkpoints:                                          
+      662 +  用于内部恢复、诊断和副作用安全判断。                        
+      663 +```                                                           
+      664 +                                                              
+      665 +## 10. 第一版暂不展开的内容                                   
+      666 +                                                              
+      667 +以下内容后续单独设计：                                        
+      668 +                                                              
+      669 +```text                                                       
+      670 +- 持久化记忆管理机制                                          
+      671 +- 上下文压缩具体策略                                          
+      672 +- A2A 多 Agent 协议                                           
+      673 +- Step 插件生态                                               
+      674 +- 工具并行调度                                                
+      675 +- 复杂事务与恢复修复策略                                      
+      676 +```                                                           
+      677 +                                                              
+      678 +这些内容在第一版设计中只保留清晰边界，不展开实现。            
+      679 +                                                              
+      680 +## 11. 自检                                                   
+      681 +                                                              
+      682 +- 本设计没有把 F-Agent 现状当作标准答案，而是以 L-Agent 的生命
+          +周期语义重新组织 Agent 内核。                                 
+      683 +- 生命周期固定，避免把 Agent 语义本身配置化。                 
+      684 +- 可插拔能力限定在 Hook Phase 内的 Step，以及 Action 外层的 Mi
+          +ddleware。                                                    
+      685 +- Resume 与 Rewind 的语义明确区分：resume 到最新完整运行结果，
+          +rewind 到用户输入 checkpoint 并创建新 branch。                
+      686 +- 持久化记忆、上下文压缩、A2A、多工具并行和事务细节都被明确推 
+          +迟，避免第一版设计发散。                                      
+  ⎿  PostToolUse:Write hook error  ⎿  Failed with non-blocking status code: Error processing hook: API returned error code 404: session code not found
+
+⏺ 设计稿已写入原有 L-Agent/design 文件；我再检查当前目录状态和文件是否存在。
+
+  Searched for 1 pattern, listed 1 directory (ctrl+o to expand)
+
+⏺ 已把确认后的 L-Agent 第一版宏观设计写入
+  /Users/wangdeyu/Desktop/OPC-Agent/L-Agent/design，并检查没有 TODO/TBD/待定
+  这类占位内容。
+
+  请你先 review 这份设计文件；如果需要调整，我们继续改，确认后再进入
+  implementation plan。
+
+✻ Baked for 2m 13s
+
+❯ /export                                                                       
+  ⎿  Conversation exported to:
+     /Users/wangdeyu/Desktop/OPC-Agent/第一版设计讨论.txt
+
+❯ 我已经review，没有问题，在进行implementation                                  
+  plan之前，我想先确定项目的目录结构                                            
+
+⏺ 可以，目录结构应该在 implementation plan
+  前先确定，因为它会直接影响后续模块边界。
+
+  我建议 L-Agent 的目录结构不要按 F-Agent
+  的现有模块简单平移，而是围绕我们刚确定的核心概念组织：
+
+  L-Agent/
+  ├── pyproject.toml
+  ├── README.md
+  ├── config.yaml.example
+  ├── main.py
+  │
+  ├── l_agent/
+  │   ├── __init__.py
+  │   │
+  │   ├── agent/
+  │   │   ├── __init__.py
+  │   │   ├── agent.py              # Agent
+  聚合根：identity、runner、registries、stores
+  │   │   ├── runner.py             # AgentRunner：推进固定八段生命周期
+  │   │   ├── context.py            # RunContext / BaseModelContext /
+  ModelRequest
+  │   │   ├── lifecycle.py          # HookPhase / ActionName / 生命周期常量
+  │   │   └── result.py             # AgentRunResult / terminal state
+  │   │
+  │   ├── steps/
+  │   │   ├── __init__.py
+  │   │   ├── base.py               # Step 基类 / StepResult 如需要
+  │   │   ├── registry.py           # StepRegistry
+  │   │   ├── before_agent.py       # before_agent 默认 steps
+  │   │   ├── before_model.py       # before_model 默认 steps
+  │   │   ├── after_model.py        # after_model 默认 steps
+  │   │   ├── before_tool.py        # before_tool 默认 steps
+  │   │   ├── after_tool.py         # after_tool 默认 steps
+  │   │   └── after_agent.py        # after_agent 默认 steps
+  │   │
+  │   ├── actions/
+  │   │   ├── __init__.py
+  │   │   ├── model_call.py         # llm.call action
+  │   │   └── tool_call.py          # tools.dispatch_serial action
+  │   │
+  │   ├── middleware/
+  │   │   ├── __init__.py
+  │   │   ├── base.py
+  │   │   ├── chain.py              # middleware chain 组装
+  │   │   ├── model.py              # budget / timeout / trace
+  │   │   └── tool.py               # approval / audit / result_limit
+  │   │
+  │   ├── timeline/
+  │   │   ├── __init__.py
+  │   │   ├── models.py             # Session / Branch / AgentRun / Iteration /
+  Message / Checkpoint
+  │   │   ├── store.py              # timeline store 接口
+  │   │   ├── resume.py             # resume 语义
+  │   │   └── rewind.py             # rewind / branch fork 语义
+  │   │
+  │   ├── tools/
+  │   │   ├── __init__.py
+  │   │   ├── base.py               # ToolSpec / ToolCall / ToolResult
+  │   │   ├── registry.py           # ToolRegistry
+  │   │   ├── dispatcher.py         # 串行 dispatch + 防御校验
+  │   │   └── builtin/
+  │   │       ├── __init__.py
+  │   │       ├── file_ops.py
+  │   │       ├── terminal.py
+  │   │       ├── web.py
+  │   │       └── think.py
+  │   │
+  │   ├── llm/
+  │   │   ├── __init__.py
+  │   │   ├── client.py             # LLMClient 接口 / OpenAI compatible 实现
+  │   │   └── types.py
+  │   │
+  │   ├── memory/
+  │   │   ├── __init__.py
+  │   │   ├── interface.py          # memory prefetch 接口
+  │   │   └── simple.py             # 第一版简单实现；持久化记忆后续单独设计
+  │   │
+  │   ├── skills/
+  │   │   ├── __init__.py
+  │   │   ├── loader.py
+  │   │   └── index.py
+  │   │
+  │   ├── config/
+  │   │   ├── __init__.py
+  │   │   └── settings.py
+  │   │
+  │   ├── storage/
+  │   │   ├── __init__.py
+  │   │   ├── sqlite.py             # SQLite 实现
+  │   │   └── schema.py
+  │   │
+  │   ├── cli/
+  │   │   ├── __init__.py
+  │   │   └── interface.py
+  │   │
+  │   └── workspace/
+  │       ├── __init__.py
+  │       └── paths.py              # workspace 路径解析
+  │
+  ├── workspace/
+  │   ├── config.yaml
+  │   ├── state.db
+  │   ├── logs/
+  │   ├── memory/
+  │   └── skills/
+  │
+  ├── tests/
+  │   ├── test_agent_runner.py
+  │   ├── test_lifecycle_steps.py
+  │   ├── test_timeline_resume.py
+  │   ├── test_timeline_rewind.py
+  │   ├── test_tool_dispatcher.py
+  │   └── test_middleware.py
+  │
+  └── docs/
+      └── design.md
+
+  我的核心建议是：
+
+  1. agent/ 放运行内核
+  AgentRunner、RunContext、生命周期定义都在这里，不混入具体工具、记忆、CLI。
+  2. steps/ 独立出来
+  因为 Step 是 L-Agent 的核心扩展单元，不应该散落在 memory/tools/session
+  各模块里。
+  3. timeline/ 独立出来
+  Session / Branch / Checkpoint / Resume / Rewind 是 L-Agent
+  的第二核心，不建议继续藏在 db/session.py 里。
+  4. actions/ 和 middleware/ 独立
+  明确 model_call / tool_call 不是普通 Step，而是受 middleware 包裹的 Action。
+  5. storage/ 只做基础设施
+  SQLite 是实现细节，timeline 的语义不要被 SQLite schema 绑死。
+  6. memory/ 先只保留 prefetch 接口
+  不在第一版目录里过度展开持久化记忆管理，因为你后续会单独设计。
+
+  我建议先确认这个大方向：目录按 L-Agent 核心概念分层，而不是按 F-Agent 
+  现有代码模块平移。
+  如果你认可，我们再逐个讨论哪些目录需要合并、哪些名字需要调整。
+
+✻ Worked for 42s
+
+❯ 把agent目录更名为core，把l_agent更名为agent                                   
+
+⏺ 可以，这个命名更好：
+
+  - 顶层 Python package 用 agent/，表达这是最终产品/库的主包。
+  - 原来的 l_agent/agent/ 改成 agent/core/，表达运行内核，而不是再嵌套一个 agent
+   概念。
+
+  调整后核心结构变成：
+
+  L-Agent/
+  ├── main.py
+  ├── pyproject.toml
+  ├── README.md
+  ├── config.yaml.example
+  │
+  ├── agent/
+  │   ├── __init__.py
+  │   │
+  │   ├── core/
+  │   │   ├── __init__.py
+  │   │   ├── agent.py              # Agent 聚合根
+  │   │   ├── runner.py             # AgentRunner
+  │   │   ├── context.py            # RunContext / BaseModelContext /
+  ModelRequest
+  │   │   ├── lifecycle.py          # HookPhase / ActionName
+  │   │   └── result.py             # AgentRunResult / terminal state
+  │   │
+  │   ├── steps/
+  │   ├── actions/
+  │   ├── middleware/
+  │   ├── timeline/
+  │   ├── tools/
+  │   ├── llm/
+  │   ├── memory/
+  │   ├── skills/
+  │   ├── config/
+  │   ├── storage/
+  │   ├── cli/
+  │   └── workspace/
+  │
+  ├── workspace/
+  ├── tests/
+  └── docs/
+
+  我也建议后续统一称呼：
+
+  agent.core        # Agent 运行内核
+  agent.steps       # 生命周期 Step
+  agent.timeline    # Session / Branch / Checkpoint
+  agent.actions     # model_call / tool_call
+
+  这样比 l_agent.agent 清爽很多，避免概念重复。
+
+✻ Churned for 19s
