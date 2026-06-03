@@ -50,6 +50,7 @@ class CommandDispatcher:
             "/resume": self._cmd_resume,
             "/rewind": self._cmd_rewind,
             "/status": self._cmd_status,
+            "/help": self._cmd_help,
         }
 
         handler = handlers.get(cmd)
@@ -132,3 +133,12 @@ class CommandDispatcher:
             table.add_row("Turns", str(runs))
 
         self._console.print(table)
+
+    async def _cmd_help(self, arg: str) -> None:
+        self._console.print("[bold]Available commands:[/bold]")
+        self._console.print("  /new      Create a new session")
+        self._console.print("  /list     List and select a session")
+        self._console.print("  /resume   Resume a session by ID")
+        self._console.print("  /rewind   Rewind to a checkpoint")
+        self._console.print("  /status   Show current session status")
+        self._console.print("  /help     Show this help message")

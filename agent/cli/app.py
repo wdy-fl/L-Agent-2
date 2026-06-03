@@ -81,6 +81,11 @@ class CLISession:
         self._commands.session_id = self._session_id
         self._commands.branch_id = self._branch_id
 
+        self._console.print()
+        self._console.print("[bold cyan]  L-Agent[/bold cyan] [dim]v0.1.0[/dim]")
+        self._console.print("[dim]  Type your message to chat, /help for commands, Ctrl+C to exit.[/dim]")
+        self._console.print()
+
         await self._main_loop()
 
     async def _main_loop(self) -> None:
