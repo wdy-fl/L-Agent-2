@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
+from agent.context.compressor import ContextCompressor, _estimate_tokens
 from agent.core.context import RunContext
-from agent.core.lifecycle import HookPhase
-from agent.llm.types import ModelRequest
+from agent.core.lifecycle import ActionName, HookPhase
+from agent.llm.types import ModelRequest, ModelResponse
+from agent.middleware.chain import MiddlewareChain
 from agent.steps.base import Step
 
 
@@ -35,27 +37,55 @@ class MessagesCollectVisible(Step):
 
 
 class ContextPrepareWithBudget(Step):
-    """Check message token count; truncate oldest if over window (simple v1)."""
+    """Compress or truncate messages to fit context window.
 
-    def __init__(self, max_context_tokens: int = 128_000) -> None:
+    Uses LLM-based summarization (via middleware chain) when possible,
+    falls back to FIFO truncation.
+    """
+
+    def __init__(
+        self,
+        compressor: ContextCompressor | None = None,
+        max_context_tokens: int = 128_000,
+        middleware_chain: MiddlewareChain | None = None,
+        model_action: Callable[[RunContext], Any] | None = None,
+    ) -> None:
         super().__init__("context.prepare_with_budget", HookPhase.before_model)
+        self._compressor = compressor
         self._max_context_tokens = max_context_tokens
+        self._chain = middleware_chain
+        self._model_action = model_action
 
     def run(self, ctx: RunContext) -> None:
-        estimated = self._estimate_tokens(ctx.messages)
+        estimated = sum(_estimate_tokens(m) for m in ctx.messages)
+
+        if self._compressor and self._compressor.should_compress(estimated) and self._chain and self._model_action:
+            call_llm = self._make_call_llm(ctx)
+            ctx.messages = self._compressor.compress(ctx.messages, estimated, call_llm)
+            estimated = sum(_estimate_tokens(m) for m in ctx.messages)
+
         while estimated > self._max_context_tokens and len(ctx.messages) > 1:
             ctx.messages.pop(0)
-            estimated = self._estimate_tokens(ctx.messages)
+            estimated = sum(_estimate_tokens(m) for m in ctx.messages)
 
-    def _estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
-        total = 0
-        for msg in messages:
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                total += len(content) // 4
-            else:
-                total += 100
-        return total
+    def _make_call_llm(self, ctx: RunContext) -> Callable[[list[dict[str, Any]]], str]:
+        def call_llm(messages: list[dict[str, Any]]) -> str:
+            saved_request = ctx.current_model_request
+            saved_response = ctx.current_model_response
+            try:
+                ctx.current_model_request = ModelRequest(messages=messages)
+                result = self._chain.execute(  # type: ignore[union-attr]
+                    ActionName.model_call, ctx, lambda: self._model_action(ctx)  # type: ignore[misc]
+                )
+                if isinstance(result, ModelResponse):
+                    return result.content
+                if ctx.current_model_response:
+                    return ctx.current_model_response.content
+                return ""
+            finally:
+                ctx.current_model_request = saved_request
+                ctx.current_model_response = saved_response
+        return call_llm
 
 
 class ModelRequestCompose(Step):

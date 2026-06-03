@@ -6,7 +6,8 @@ from pathlib import Path
 
 from agent.actions.model_call import make_llm_call_action, make_llm_stream_action
 from agent.actions.tool_call import make_tool_call_action
-from agent.config.settings import Settings, load_settings
+from agent.config.settings import load_settings
+from agent.context.compressor import ContextCompressor
 from agent.core.runner import AgentRunner
 from agent.llm.client import OpenAICompatibleClient
 from agent.llm.types import ModelConfig
@@ -85,7 +86,29 @@ def build_runner(config_path: Path | None = None) -> AgentRunner:
 
     reg.register(IterationCreate())
     reg.register(MessagesCollectVisible())
-    reg.register(ContextPrepareWithBudget())
+
+    chain = MiddlewareChain()
+    chain.add(BudgetGuard())
+    chain.add(TraceRecord())
+    chain.add(ApprovalGuard())
+    chain.add(AuditRecord())
+    chain.add(ResultLimitGuard())
+
+    model_action = make_llm_call_action(client)
+
+    compressor = ContextCompressor(
+        context_window=settings.context.max_context_tokens,
+        threshold=settings.context.compression_threshold,
+        protected_head=settings.context.protected_head,
+        protected_tail_tokens=settings.context.protected_tail_tokens,
+        min_saving=settings.context.min_saving,
+    )
+    reg.register(ContextPrepareWithBudget(
+        compressor=compressor,
+        max_context_tokens=settings.context.max_context_tokens,
+        middleware_chain=chain,
+        model_action=model_action,
+    ))
     reg.register(ModelRequestCompose())
 
     reg.register(ModelCaptureResponse())
@@ -104,17 +127,10 @@ def build_runner(config_path: Path | None = None) -> AgentRunner:
     reg.register(ToolResultsCapture())
     reg.register(MessageCommitToolResults())
 
-    chain = MiddlewareChain()
-    chain.add(BudgetGuard())
-    chain.add(TraceRecord())
-    chain.add(ApprovalGuard())
-    chain.add(AuditRecord())
-    chain.add(ResultLimitGuard())
-
     return AgentRunner(
         registry=reg,
         middleware_chain=chain,
-        model_call=make_llm_call_action(client),
+        model_call=model_action,
         tool_call=make_tool_call_action(dispatcher),
         model_stream=make_llm_stream_action(client),
     )
