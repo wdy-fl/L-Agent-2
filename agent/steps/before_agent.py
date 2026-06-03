@@ -143,6 +143,24 @@ class MessageCommitUser(Step):
         store.append_message(msg)
 
 
+class BranchResolveActive(Step):
+    """Load active branch from session and set ctx.branch_id."""
+
+    def __init__(self) -> None:
+        super().__init__("branch.resolve_active", HookPhase.before_agent)
+
+    def run(self, ctx: RunContext) -> None:
+        store = ctx.timeline_store
+        if store is None:
+            return
+        if ctx.branch_id:
+            return
+        session = store.get_session(ctx.session_id)
+        if session is None:
+            return
+        ctx.branch_id = session.active_branch_id
+
+
 class CheckpointCreateUserSnapshot(Step):
     """Create user_snapshot checkpoint after committing user message."""
 

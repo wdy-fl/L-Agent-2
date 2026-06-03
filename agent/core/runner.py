@@ -29,7 +29,9 @@ class AgentRunner:
         try:
             self._run_phase(HookPhase.before_agent, ctx)
             self._react_loop(ctx)
-            if not ctx.errors:
+            if ctx.interrupted:
+                ctx.status = "interrupted"
+            elif not ctx.errors:
                 ctx.status = "completed"
         except Exception as exc:
             ctx.errors.append(exc)

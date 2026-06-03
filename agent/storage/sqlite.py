@@ -162,6 +162,12 @@ class SQLiteTimelineStore(TimelineStore):
         )
         self._conn.commit()
 
+    def get_checkpoint(self, checkpoint_id: str) -> Checkpoint | None:
+        row = self._conn.execute(
+            "SELECT * FROM checkpoints WHERE checkpoint_id=?", (checkpoint_id,)
+        ).fetchone()
+        return self._row_to_checkpoint(row) if row else None
+
     def get_checkpoints_by_branch(self, branch_id: str) -> list[Checkpoint]:
         rows = self._conn.execute(
             "SELECT * FROM checkpoints WHERE branch_id=? ORDER BY created_at", (branch_id,)
@@ -174,6 +180,21 @@ class SQLiteTimelineStore(TimelineStore):
             (branch_id,),
         ).fetchone()
         return self._row_to_checkpoint(row) if row else None
+
+    # --- Query helpers ---
+    def get_latest_run_by_branch(self, branch_id: str) -> AgentRun | None:
+        row = self._conn.execute(
+            "SELECT * FROM agent_runs WHERE branch_id=? ORDER BY created_at DESC LIMIT 1",
+            (branch_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return AgentRun(
+            run_id=row["run_id"], session_id=row["session_id"],
+            branch_id=row["branch_id"], status=RunStatus(row["status"]),
+            created_at=_str_to_dt(row["created_at"]),
+            completed_at=_str_to_dt(row["completed_at"]) if row["completed_at"] else None,
+        )
 
     # --- helpers ---
     @staticmethod

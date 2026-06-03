@@ -45,3 +45,30 @@ class CheckpointRecordRunTerminalState(Step):
             message_cursor=cursor,
         )
         store.create_checkpoint(cp)
+
+
+class BranchUpdateResumeHead(Step):
+    """Update branch.resume_head when run completes successfully."""
+
+    def __init__(self) -> None:
+        super().__init__("branch.update_resume_head", HookPhase.after_agent)
+
+    def run(self, ctx: RunContext) -> None:
+        store = ctx.timeline_store
+        if store is None:
+            return
+        if ctx.status != "completed":
+            return
+        checkpoints = store.get_checkpoints_by_branch(ctx.branch_id)
+        run_completed_cp = None
+        for cp in reversed(checkpoints):
+            if cp.run_id == ctx.run_id and cp.name == "run_completed":
+                run_completed_cp = cp
+                break
+        if run_completed_cp is None:
+            return
+        branch = store.get_branch(ctx.branch_id)
+        if branch is None:
+            return
+        branch.resume_head = run_completed_cp.checkpoint_id
+        store.update_branch(branch)
