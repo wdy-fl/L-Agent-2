@@ -32,47 +32,6 @@ L-Agent 实施计划的第八步。前七步完成后，Agent 具备完整的运
 
 **依赖**：无前置依赖，可独立启动
 
-### 8.2 上下文压缩策略（已实现）
-
-**实现方案**：头尾保护 + LLM 结构化摘要 + 迭代压缩（参照 F-Agent 方案）
-
-**核心文件**：
-
-- `agent/context/compressor.py` — `ContextCompressor` 压缩器
-- `agent/steps/before_model.py` — `ContextPrepareWithBudget` Step 集成压缩器
-- `agent/config/settings.py` — `ContextSettings` 配置
-
-**压缩流程**：
-
-1. 每次 before_model 阶段估算当前 token 数
-2. 超过 `context_window * compression_threshold`（默认 50%）时触发压缩
-3. 按 tool_calls 约束将消息分为不可拆分的原子组
-4. 划分三段：head（前 N 组保护）、tail（最近 M tokens 保护）、middle（可压缩区域）
-5. middle 区域工具结果替换为占位符，通过 LLM 生成结构化摘要
-6. 支持迭代压缩：识别旧摘要，与新增对话合并生成更新摘要
-7. 反抖动：节省不足 `min_saving` 时跳过
-8. 压缩后仍超限则 fallback 到 FIFO 截断
-
-**LLM 调用方式**：
-
-压缩 Step 内部的 LLM 调用通过 `middleware_chain.execute(ActionName.model_call, ...)` 执行，复用主模型调用的 middleware pipeline（BudgetGuard、TraceRecord 等自动生效）。
-
-**配置项**（`config.yaml` → `context` 段）：
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `max_context_tokens` | 128000 | 上下文窗口上限 |
-| `compression_threshold` | 0.5 | 触发压缩的阈值比例 |
-| `protected_head` | 3 | 保护的头部消息组数 |
-| `protected_tail_tokens` | 20000 | 保护的尾部 token 数 |
-| `min_saving` | 0.1 | 反抖动最小节省比例 |
-
-**待后续优化**：
-
-- 压缩状态持久化与恢复（resume 时恢复 `_last_compressed_tokens`）
-- 压缩与 branch/rewind 的交互（摘要是否随 branch 隔离）
-- 更精确的 token 计算（接入 tokenizer 替代字符估算）
-
 ### 8.3 A2A 多 Agent 协议
 
 **范围**：
@@ -150,7 +109,6 @@ L-Agent 实施计划的第八步。前七步完成后，Agent 具备完整的运
 
 ```
 8.1 持久化记忆 ──── 无前置依赖
-8.2 上下文压缩 ──── 已完成 ✓
 8.3 A2A 协议 ────── 依赖第三步（工具通路稳定）
 8.4 Step 插件 ───── 依赖第一步（核心架构经过验证）
 8.5 工具并行 ────── 依赖第三步（工具通路稳定）
@@ -160,11 +118,10 @@ L-Agent 实施计划的第八步。前七步完成后，Agent 具备完整的运
 建议推进顺序（按优先级）：
 
 1. 8.1 持久化记忆（对用户体验影响最大）
-2. 8.2 上下文压缩（长对话必需）
-3. 8.6 事务恢复（数据可靠性）
-4. 8.5 工具并行（性能优化）
-5. 8.3 A2A 协议（新能力扩展）
-6. 8.4 Step 插件（生态建设）
+2. 8.6 事务恢复（数据可靠性）
+3. 8.5 工具并行（性能优化）
+4. 8.3 A2A 协议（新能力扩展）
+5. 8.4 Step 插件（生态建设）
 
 ## Todo List
 
@@ -172,8 +129,6 @@ L-Agent 实施计划的第八步。前七步完成后，Agent 具备完整的运
 |---|------|------|
 | 8.1 | 持久化记忆管理机制 — 设计讨论 | pending |
 | 8.2 | 持久化记忆管理机制 — 实施 | pending |
-| 8.3 | 上下文压缩策略 — 设计讨论 | done |
-| 8.4 | 上下文压缩策略 — 实施 | done |
 | 8.5 | 复杂事务与恢复修复策略 — 设计讨论 | pending |
 | 8.6 | 复杂事务与恢复修复策略 — 实施 | pending |
 | 8.7 | 工具并行调度 — 设计讨论 | pending |
