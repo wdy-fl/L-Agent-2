@@ -69,8 +69,7 @@ def _build_full_registry(tool_registry: ToolRegistry | None = None) -> StepRegis
     reg.register(ContextInitialize())
     reg.register(InputNormalize())
     reg.register(BaseContextLoadStaticParts(
-        identity="You are a helpful assistant.",
-        guidance="Be concise.",
+        guidance="You are a helpful assistant.\n\nBe concise.",
         model_config=ModelConfig(),
     ))
     reg.register(MemoryPrefetch())

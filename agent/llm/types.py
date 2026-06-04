@@ -8,7 +8,6 @@ from typing import Any
 class BaseModelContext:
     """Run-level immutable context, built once in before_agent."""
 
-    identity: str = ""
     guidance: str = ""
     workspace_context: str = ""
     memory_context: str | None = None

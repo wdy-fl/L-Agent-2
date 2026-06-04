@@ -55,8 +55,7 @@ def _build_full_registry(model_config: ModelConfig | None = None) -> StepRegistr
     reg.register(ContextInitialize())
     reg.register(InputNormalize())
     reg.register(BaseContextLoadStaticParts(
-        identity="You are a helpful assistant.",
-        guidance="Be concise.",
+        guidance="You are a helpful assistant.\n\nBe concise.",
         model_config=model_config or ModelConfig(),
     ))
     reg.register(MemoryPrefetch())
@@ -139,7 +138,8 @@ class TestIntegrationFullLifecycle:
         await runner.run_to_completion(ctx)
 
         assert ctx.base_model_context is not None
-        assert ctx.base_model_context.identity == "You are a helpful assistant."
+        assert not hasattr(ctx.base_model_context, "identity")
+        assert ctx.base_model_context.guidance == "You are a helpful assistant.\n\nBe concise."
         assert ctx.base_model_context.memory_context is None
         assert ctx.base_model_context.available_tools == []
 
@@ -260,7 +260,7 @@ class TestBudgetGuard:
         reg = StepRegistry()
         reg.register(ContextInitialize())
         reg.register(InputNormalize())
-        reg.register(BaseContextLoadStaticParts(identity="test"))
+        reg.register(BaseContextLoadStaticParts(guidance="test"))
         reg.register(MemoryPrefetch())
         reg.register(ToolsSnapshotAvailableTools())
         reg.register(BudgetInitialize(max_iterations=10, max_tokens=100_000))

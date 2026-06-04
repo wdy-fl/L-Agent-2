@@ -48,7 +48,7 @@
 
 ### 2.1 上下文数据结构
 
-- `BaseModelContext`：identity / guidance / workspace_context / memory_context / available_tools / model_config
+- `BaseModelContext`：guidance / workspace_context / memory_context / available_tools / model_config
 - `ModelRequest`：messages / tools / model / temperature / max_tokens
 
 ### 2.2 LLM 客户端
@@ -61,7 +61,7 @@
 
 - `context.initialize`：创建 RunContext 基础字段
 - `input.normalize`：规范化用户输入
-- `base_context.load_static_parts`：加载 identity / guidance / workspace 静态上下文
+- `base_context.load_static_parts`：加载 guidance / workspace 静态上下文
 - `budget.initialize`：初始化预算（最大轮数、token 限额）
 
 ### 2.4 before_model steps

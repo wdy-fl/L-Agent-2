@@ -21,8 +21,7 @@ L-Agent 实施计划的第二步。在运行内核骨架基础上，接通模型
 
 **BaseModelContext**（run 级不变部分，before_agent 构建）：
 
-- identity：Agent 身份定义
-- guidance：Agent 行为原则
+- guidance：Agent 静态提示词，包含身份定义和行为原则
 - workspace_context：工作目录、项目说明、规则文件等静态上下文
 - memory_context：memory.prefetch 的召回结果（本步为空占位）
 - available_tools：tools.snapshot 的结果（本步为空占位）
@@ -52,7 +51,7 @@ L-Agent 实施计划的第二步。在运行内核骨架基础上，接通模型
 
 - `context.initialize`：创建 RunContext 基础字段，初始化空的 iterations 列表
 - `input.normalize`：规范化用户输入（去首尾空白、记录原始输入）
-- `base_context.load_static_parts`：加载 identity / guidance / workspace 静态上下文，写入 ctx.base_model_context
+- `base_context.load_static_parts`：加载 guidance / workspace 静态上下文，写入 ctx.base_model_context
 - `memory.prefetch`：占位实现，ctx.base_model_context.memory_context = None
 - `tools.snapshot_available_tools`：占位实现，ctx.base_model_context.available_tools = []
 - `budget.initialize`：初始化预算状态（最大轮数、token 限额、当前消耗）
@@ -68,7 +67,7 @@ before_agent 的完整职责定义：
 - `iteration.create`：递增 iteration_index，记录到 ctx.iterations
 - `messages.collect_visible`：从内存 message list 收集本轮可见消息（第一轮只有 user message，后续轮包含 assistant + tool results）
 - `context.prepare_with_budget`：检查消息总 token 是否超窗口，超则截断尾部保留最近消息（第一版简单策略）
-- `model_request.compose`：合并 base_model_context（identity/guidance/memory/tools）+ visible messages + model params → 写入 ctx.current_model_request
+- `model_request.compose`：合并 base_model_context（guidance/memory/tools）+ visible messages + model params → 写入 ctx.current_model_request
 
 before_model 的完整职责定义：
 

@@ -32,7 +32,7 @@ Agent 是一个完整运行主体，不只是一次 LLM 调用器。
 
 ```text
 Agent
-├── identity / guidance
+├── guidance
 ├── AgentRunner
 ├── StepRegistry
 ├── Middleware
@@ -229,7 +229,6 @@ ModelRequest      # iteration 级动态请求
 `BaseModelContext` 在 `before_agent` 构建：
 
 ```text
-identity
 guidance
 workspace static context
 normalized user input metadata

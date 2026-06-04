@@ -27,8 +27,7 @@ budget:
   max_tokens: 200000
 
 agent:
-  identity: "You are L-Agent, an AI coding assistant."
-  guidance: "Be concise. Think step by step. Use tools when needed."
+  guidance_file: "knowledge/guidance.md"
 ```
 
 ### 启动

@@ -101,8 +101,6 @@ class ModelRequestCompose(Step):
             return
 
         system_parts: list[str] = []
-        if base.identity:
-            system_parts.append(base.identity)
         if base.guidance:
             system_parts.append(base.guidance)
         if base.workspace_context:

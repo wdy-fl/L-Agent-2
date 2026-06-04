@@ -36,24 +36,21 @@ class InputNormalize(Step):
 
 
 class BaseContextLoadStaticParts(Step):
-    """Load identity / guidance / workspace into ctx.base_model_context."""
+    """Load guidance / workspace into ctx.base_model_context."""
 
     def __init__(
         self,
-        identity: str = "",
         guidance: str = "",
         workspace_context: str = "",
         model_config: ModelConfig | None = None,
     ) -> None:
         super().__init__("base_context.load_static_parts", HookPhase.before_agent)
-        self._identity = identity
         self._guidance = guidance
         self._workspace_context = workspace_context
         self._model_config = model_config or ModelConfig()
 
     def run(self, ctx: RunContext) -> None:
         ctx.base_model_context = BaseModelContext(
-            identity=self._identity,
             guidance=self._guidance,
             workspace_context=self._workspace_context,
             model_config=self._model_config,

@@ -33,8 +33,7 @@ context:
 # Agent 人设与行为引导
 # ═══════════════════════════════════════════
 agent:
-  identity: "You are L-Agent, an AI coding assistant. Use the available tools to help the user."
-  guidance: "Be concise. Think step by step. Use tools when needed."
+  guidance_file: "knowledge/guidance.md"
 
 # ═══════════════════════════════════════════
 # 工具审批策略
