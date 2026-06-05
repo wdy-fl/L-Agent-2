@@ -41,6 +41,7 @@ config.yaml
 *.local.yaml
 *.local.yml
 workspace/
+.worktrees/
 
 # Logs and runtime files
 *.log

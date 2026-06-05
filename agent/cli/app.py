@@ -17,6 +17,7 @@ from agent.cli.approval import ApprovalHandler
 from agent.cli.commands import CommandDispatcher
 from agent.cli.config import load_approval_config
 from agent.cli.render import Renderer
+from agent.config.settings import DEFAULT_CONFIG_PATHS, load_settings
 from agent.core.context import RunContext
 from agent.core.factory import build_runner
 from agent.core.runner import AgentRunner
@@ -30,11 +31,10 @@ from agent.events import (
     ToolDone,
     ToolStart,
 )
-from agent.middleware.chain import MiddlewareChain  # noqa: F401
-from agent.steps.registry import StepRegistry  # noqa: F401
-from agent.storage.sqlite import SQLiteTimelineStore
+from agent.home import initialize_agent_home
 from agent.timeline.resume import resume
 from agent.timeline.session_factory import create_session_with_default_branch
+from agent.timeline.store import TimelineStore
 from agent.tools.builtin import ALWAYS_CONFIRM_TOOLS, AUTO_APPROVE_TOOLS
 
 app = typer.Typer(add_completion=False)
@@ -47,7 +47,7 @@ class CLISession:
     def __init__(
         self,
         runner: AgentRunner,
-        store: SQLiteTimelineStore,
+        store: TimelineStore,
         config_path: Path | None = None,
     ) -> None:
         self._runner = runner
@@ -65,6 +65,10 @@ class CLISession:
         self._session_id: str = ""
         self._branch_id: str = ""
         self._interrupted = False
+
+    def _handle_escape(self, event) -> None:
+        del event
+        self._interrupted = True
 
     async def start(self, session_id: str | None = None) -> None:
         """Start the CLI session."""
@@ -91,10 +95,7 @@ class CLISession:
     async def _main_loop(self) -> None:
         """Main input loop."""
         kb = KeyBindings()
-
-        @kb.add(Keys.Escape)
-        def _esc(event):
-            self._interrupted = True
+        kb.add(Keys.Escape)(self._handle_escape)
 
         session: PromptSession = PromptSession(key_bindings=kb)
 
@@ -126,6 +127,7 @@ class CLISession:
             session_id=self._session_id,
             branch_id=self._branch_id,
             timeline_store=self._store,
+            home_client=self._store,
             auto_approve_tools=self._approval._auto_approve,
             always_confirm_tools=self._always_confirm,
         )
@@ -164,21 +166,27 @@ class CLISession:
             self._render.show_status(ctx.iteration_index, total_tokens, elapsed_ms)
 
 
+def _resolve_cli_config_path(config: str | None) -> Path:
+    if config:
+        return Path(config)
+    for path in DEFAULT_CONFIG_PATHS:
+        if path.exists():
+            return path
+    return Path("workspace/config.yaml")
+
+
 @app.command()
 def main(
     session: Optional[str] = typer.Option(None, "--session", "-s", help="Resume a session by ID"),
-    db: str = typer.Option("workspace/timeline.db", "--db", help="SQLite database path"),
     config: Optional[str] = typer.Option(None, "--config", "-c", help="Config YAML path"),
 ) -> None:
     """L-Agent CLI - Interactive AI Agent."""
-    db_path = Path(db)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    store = SQLiteTimelineStore(db_path)
+    config_path = _resolve_cli_config_path(config)
+    settings = load_settings(config_path)
+    home_client = initialize_agent_home(settings, config_path=config_path)
+    runner = build_runner(config_path, home_client=home_client)
 
-    config_path = Path(config) if config else None
-    runner = build_runner(config_path)
-
-    cli_session = CLISession(runner, store, config_path)
+    cli_session = CLISession(runner, home_client, config_path)
     asyncio.run(cli_session.start(session_id=session))
 
 

@@ -14,6 +14,7 @@ from agent.llm.types import ModelConfig
 from agent.middleware.chain import MiddlewareChain
 from agent.middleware.model import BudgetGuard, TraceRecord
 from agent.middleware.tool import ApprovalGuard, AuditRecord, ResultLimitGuard
+from agent.steps.after_agent import AgentHomeRunFinalize
 from agent.steps.after_model import (
     MessageCommitAssistant,
     ModelCaptureResponse,
@@ -25,9 +26,12 @@ from agent.steps.after_tool import MessageCommitToolResults, ToolResultsCapture
 from agent.steps.before_agent import (
     BaseContextLoadStaticParts,
     BudgetInitialize,
+    CheckpointCreateUserSnapshot,
     ContextInitialize,
     InputNormalize,
     MemoryPrefetch,
+    MessageCommitUser,
+    RunCreate,
     ToolsSnapshotAvailableTools,
 )
 from agent.steps.before_model import (
@@ -49,7 +53,7 @@ from agent.tools.builtin import create_builtin_registry
 from agent.tools.dispatcher import ToolDispatcher
 
 
-def build_runner(config_path: Path | None = None) -> AgentRunner:
+def build_runner(config_path: Path | None = None, home_client=None) -> AgentRunner:
     settings = load_settings(config_path)
 
     if not settings.llm.api_key:
@@ -66,7 +70,7 @@ def build_runner(config_path: Path | None = None) -> AgentRunner:
     )
     client = OpenAICompatibleClient(api_base=settings.llm.api_base, api_key=settings.llm.api_key)
 
-    tool_registry = create_builtin_registry()
+    tool_registry = create_builtin_registry(home_client=home_client)
     dispatcher = ToolDispatcher(tool_registry)
 
     reg = StepRegistry()
@@ -76,7 +80,10 @@ def build_runner(config_path: Path | None = None) -> AgentRunner:
         guidance=settings.resolve_file(settings.agent.guidance_file),
         model_config=model_config,
     ))
-    reg.register(MemoryPrefetch())
+    reg.register(RunCreate())
+    reg.register(MessageCommitUser())
+    reg.register(CheckpointCreateUserSnapshot())
+    reg.register(MemoryPrefetch(limit=settings.agent_home.memory_prefetch_limit))
     reg.register(ToolsSnapshotAvailableTools(registry=tool_registry))
     reg.register(BudgetInitialize(
         max_iterations=settings.budget.max_iterations,
@@ -125,6 +132,8 @@ def build_runner(config_path: Path | None = None) -> AgentRunner:
 
     reg.register(ToolResultsCapture())
     reg.register(MessageCommitToolResults())
+
+    reg.register(AgentHomeRunFinalize(auto_extract_memory=settings.agent_home.auto_extract_memory))
 
     return AgentRunner(
         registry=reg,
