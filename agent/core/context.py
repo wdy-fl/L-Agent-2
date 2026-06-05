@@ -64,3 +64,4 @@ class RunContext:
 
     # --- timeline store ---
     timeline_store: TimelineStore | None = None
+    home_client: Any = None

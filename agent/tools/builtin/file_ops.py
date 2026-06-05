@@ -6,8 +6,17 @@ import fnmatch
 import os
 import re
 from pathlib import Path
+from typing import Any, Protocol
 
 from agent.tools.base import ToolSpec
+
+
+class AgentHomeWorkspace(Protocol):
+    def workspace_get_text(self, path: str) -> str: ...
+
+    def workspace_put(self, path: str, content: str | bytes) -> dict[str, Any]: ...
+
+    def workspace_list(self, prefix: str) -> list[dict[str, Any]]: ...
 
 
 def _read_file_handler(file_path: str, offset: int = 1, limit: int | None = None) -> str:
@@ -148,3 +157,90 @@ search_file_tool = ToolSpec(
     },
     handler=_search_file_handler,
 )
+
+
+def create_agent_home_file_tools(home_client: AgentHomeWorkspace) -> list[ToolSpec]:
+    workspace_read_file_schema = {
+        "type": "object",
+        "properties": {
+            "file_path": {"type": "string", "description": "Logical workspace path to read, e.g. /notes/todo.md."},
+            "offset": {"type": "integer", "description": "Starting line number (1-based). Default: 1."},
+            "limit": {"type": "integer", "description": "Number of lines to read. Default: all."},
+        },
+        "required": ["file_path"],
+    }
+    workspace_write_file_schema = {
+        "type": "object",
+        "properties": {
+            "file_path": {"type": "string", "description": "Logical workspace path to write, e.g. /notes/todo.md."},
+            "content": {"type": "string", "description": "Content to write to the file."},
+        },
+        "required": ["file_path", "content"],
+    }
+    workspace_list_directory_schema = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Logical workspace directory path to list, e.g. /notes."},
+            "pattern": {"type": "string", "description": "Glob pattern to filter entries (e.g. '*.py')."},
+        },
+        "required": ["path"],
+    }
+    workspace_search_file_schema = {
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "description": "Regex pattern to search for."},
+            "path": {"type": "string", "description": "Logical workspace directory or file path to search, e.g. /notes. Default: /."},
+            "file_pattern": {"type": "string", "description": "Glob to filter filenames (e.g. '*.py')."},
+        },
+        "required": ["pattern"],
+    }
+
+    def read_file(file_path: str, offset: int = 1, limit: int | None = None) -> str:
+        lines = home_client.workspace_get_text(file_path).splitlines(keepends=True)
+        start = max(0, offset - 1)
+        end = start + limit if limit else len(lines)
+        selected = lines[start:end]
+        return "\n".join(f"{i}\t{line.rstrip()}" for i, line in enumerate(selected, start=start + 1))
+
+    def write_file(file_path: str, content: str) -> str:
+        home_client.workspace_put(file_path, content)
+        return f"Written {len(content.encode('utf-8'))} bytes to {file_path}"
+
+    def list_directory(path: str, pattern: str | None = None, **kwargs: object) -> str:
+        del kwargs
+        entries = []
+        for item in home_client.workspace_list(path):
+            logical_path = item.get("path", "")
+            if pattern and not fnmatch.fnmatch(os.path.basename(logical_path), pattern):
+                continue
+            entries.append(logical_path)
+        return "\n".join(entries) if entries else "(empty)"
+
+    def search_file(pattern: str, path: str = "/", file_pattern: str | None = None) -> str:
+        try:
+            regex = re.compile(pattern)
+        except re.error as e:
+            raise ValueError(f"Invalid pattern: {e}")
+
+        matches: list[str] = []
+        for item in home_client.workspace_list(path):
+            logical_path = item.get("path", "")
+            if item.get("kind", "file") != "file":
+                continue
+            if file_pattern and not fnmatch.fnmatch(os.path.basename(logical_path), file_pattern):
+                continue
+            try:
+                text = home_client.workspace_get_text(logical_path)
+            except (OSError, UnicodeDecodeError):
+                continue
+            for i, line in enumerate(text.splitlines(), 1):
+                if regex.search(line):
+                    matches.append(f"{logical_path}:{i}: {line}")
+        return "\n".join(matches) if matches else "No matches found."
+
+    return [
+        ToolSpec(read_file_tool.name, "Read a file from the Agent-Home workspace using a logical path such as /notes/todo.md. Returns numbered lines.", workspace_read_file_schema, read_file),
+        ToolSpec(write_file_tool.name, "Write content to a logical path in the Agent-Home workspace, such as /notes/todo.md.", workspace_write_file_schema, write_file),
+        ToolSpec(list_directory_tool.name, "List files and directories under a logical Agent-Home workspace path such as /notes.", workspace_list_directory_schema, list_directory),
+        ToolSpec(search_file_tool.name, "Search file contents under a logical Agent-Home workspace path using regex.", workspace_search_file_schema, search_file),
+    ]

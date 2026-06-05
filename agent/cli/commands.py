@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from rich.console import Console
 from rich.table import Table
 
 from agent.cli.select import select_prompt
-from agent.storage.sqlite import SQLiteTimelineStore
 from agent.timeline.models import CheckpointKind
-from agent.timeline.resume import ResumeResult, resume
-from agent.timeline.rewind import RewindResult, rewind
+from agent.timeline.resume import resume
+from agent.timeline.rewind import rewind
 from agent.timeline.session_factory import create_session_with_default_branch
 
 
 class CommandDispatcher:
     """Handles / prefixed commands."""
 
-    def __init__(self, store: SQLiteTimelineStore, console: Console) -> None:
+    def __init__(self, store: Any, console: Console) -> None:
         self._store = store
         self._console = console
         self._session_id: str = ""
@@ -50,6 +51,7 @@ class CommandDispatcher:
             "/resume": self._cmd_resume,
             "/rewind": self._cmd_rewind,
             "/status": self._cmd_status,
+            "/memory": self._cmd_memory,
             "/help": self._cmd_help,
         }
 
@@ -61,12 +63,14 @@ class CommandDispatcher:
         return True
 
     async def _cmd_new(self, arg: str) -> None:
+        del arg
         session = create_session_with_default_branch(self._store)
         self._session_id = session.session_id
         self._branch_id = session.active_branch_id
         self._console.print("[green]New session created.[/green]")
 
     async def _cmd_list(self, arg: str) -> None:
+        del arg
         sessions = self._store.list_sessions()
         if not sessions:
             self._console.print("[dim]No sessions found.[/dim]")
@@ -99,6 +103,7 @@ class CommandDispatcher:
         await self._cmd_list("")
 
     async def _cmd_rewind(self, arg: str) -> None:
+        del arg
         if not self._branch_id:
             self._console.print("[red]No active session.[/red]")
             return
@@ -121,6 +126,7 @@ class CommandDispatcher:
         self._console.print(f"[green]Rewound. New branch: {result.new_branch_id[:8]}...[/green]")
 
     async def _cmd_status(self, arg: str) -> None:
+        del arg
         table = Table(title="Session Status", show_header=False)
         table.add_column("Key", style="bold")
         table.add_column("Value")
@@ -134,11 +140,63 @@ class CommandDispatcher:
 
         self._console.print(table)
 
+    async def _cmd_memory(self, arg: str) -> None:
+        usage = "Usage: /memory add <content> | /memory search <query> | /memory extract"
+        parts = arg.strip().split(maxsplit=1)
+        if not parts:
+            self._console.print(usage)
+            return
+
+        action = parts[0].lower()
+        value = parts[1] if len(parts) > 1 else ""
+        if action == "add" and value:
+            if not self._memory_available(action):
+                self._console.print("Agent-Home memory is not available.")
+                return
+            memory = self._store.create_memory("note", value, source_session_id=self._session_id)
+            self._console.print(f"Memory added: {memory.get('content', value)}")
+            return
+        if action == "search" and value:
+            if not self._memory_available(action):
+                self._console.print("Agent-Home memory is not available.")
+                return
+            memories = self._store.search_memory(value)
+            if not memories:
+                self._console.print("No memories found.")
+                return
+            for memory in memories:
+                self._console.print(f"[{memory.get('type', '')}] {memory.get('content', '')}", markup=False)
+            return
+        if action == "extract" and not value:
+            if not self._memory_available(action):
+                self._console.print("Agent-Home memory is not available.")
+                return
+            try:
+                self._store.extract_memory(self._session_id, "manual")
+            except Exception as exc:
+                if getattr(exc, "code", "") == "auto_extract_disabled":
+                    self._console.print("Memory auto-extraction is disabled.")
+                    return
+                raise
+            return
+
+        self._console.print(usage)
+
+    def _memory_available(self, action: str) -> bool:
+        required = {
+            "add": "create_memory",
+            "search": "search_memory",
+            "extract": "extract_memory",
+        }.get(action)
+        return required is None or callable(getattr(self._store, required, None))
+
     async def _cmd_help(self, arg: str) -> None:
+        del arg
         self._console.print("[bold]Available commands:[/bold]")
         self._console.print("  /new      Create a new session")
         self._console.print("  /list     List and select a session")
         self._console.print("  /resume   Resume a session by ID")
         self._console.print("  /rewind   Rewind to a checkpoint")
         self._console.print("  /status   Show current session status")
+        self._console.print("  /memory   Manage Agent-Home memory")
         self._console.print("  /help     Show this help message")
