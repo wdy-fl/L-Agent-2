@@ -25,7 +25,8 @@ def load_approval_config(config_path: Path | None = None) -> ApprovalConfig:
         data = yaml.safe_load(f) or {}
 
     approval_data = data.get("approval", {})
+    defaults = ApprovalConfig()
     return ApprovalConfig(
-        auto_approve=approval_data.get("auto_approve", ApprovalConfig.auto_approve),
-        always_confirm=approval_data.get("always_confirm", ApprovalConfig.always_confirm),
+        auto_approve=approval_data.get("auto_approve", defaults.auto_approve),
+        always_confirm=approval_data.get("always_confirm", defaults.always_confirm),
     )
