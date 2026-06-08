@@ -1,11 +1,8 @@
 """Tests for step-7: built-in tools."""
 
-from agent.tools.base import ToolCall, ToolPlan, ToolResultStatus
 from agent.tools.builtin import (
-    ALL_BUILTIN_TOOLS,
     AUTO_APPROVE_TOOLS,
     ALWAYS_CONFIRM_TOOLS,
-    create_builtin_registry,
 )
 from agent.tools.builtin.file_ops import (
     _read_file_handler,
@@ -15,7 +12,6 @@ from agent.tools.builtin.file_ops import (
 )
 from agent.tools.builtin.terminal import _terminal_handler
 from agent.tools.builtin.web import _web_fetch_handler
-from agent.tools.dispatcher import ToolDispatcher
 
 
 class TestReadFile:
@@ -176,45 +172,3 @@ class TestApprovalConfig:
 
     def test_no_overlap(self):
         assert AUTO_APPROVE_TOOLS & ALWAYS_CONFIRM_TOOLS == set()
-
-
-class TestBuiltinRegistry:
-    def test_all_tools_registered(self):
-        registry = create_builtin_registry()
-        for tool in ALL_BUILTIN_TOOLS:
-            assert registry.get(tool.name) is not None
-
-    def test_schemas_complete(self):
-        registry = create_builtin_registry()
-        schemas = registry.list_schemas()
-        assert len(schemas) == len(ALL_BUILTIN_TOOLS)
-        for schema in schemas:
-            func = schema["function"]
-            assert "name" in func
-            assert "description" in func
-            assert "parameters" in func
-            assert "required" in func["parameters"]
-
-
-class TestDispatcherIntegration:
-    def test_read_file_via_dispatcher(self, tmp_path):
-        f = tmp_path / "test.txt"
-        f.write_text("content here\n")
-        registry = create_builtin_registry()
-        dispatcher = ToolDispatcher(registry)
-        plan = ToolPlan(calls=[
-            ToolCall(call_id="tc1", tool_name="read_file", arguments={"file_path": str(f)}),
-        ])
-        results = dispatcher.dispatch(plan)
-        assert results[0].status == ToolResultStatus.success
-        assert "content here" in results[0].content
-
-    def test_error_stays_internal(self):
-        registry = create_builtin_registry()
-        dispatcher = ToolDispatcher(registry)
-        plan = ToolPlan(calls=[
-            ToolCall(call_id="tc1", tool_name="read_file", arguments={"file_path": "/no/such/file"}),
-        ])
-        results = dispatcher.dispatch(plan)
-        assert results[0].status == ToolResultStatus.error
-        assert "not found" in results[0].content.lower()

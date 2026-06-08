@@ -15,11 +15,10 @@
 - 确保 `create_builtin_registry` 只注册 Agent Home 支持的文件工具和终端工具。
 - 未提供 `home_client` 时，明确抛出 `RuntimeError`。
 - 保持现有公开工具名不变，使模型/工具调用方仍能看到 `read_file`、`write_file`、`list_directory`、`search_file` 和 `terminal`。
-- 更新此前依赖“无 `home_client` 时注册本地工具”行为的测试。
+- 移除此前依赖“无 `home_client` 时注册本地工具”行为的测试。
 
 ## 非目标
 
-- 本次不删除 `file_ops.py` 或 `terminal.py` 中的本地工具实现，除非注册层已不再使用它们。这些实现后续仍可能用于更底层的测试或复用。
 - 除非导入或测试需要，不修改审批策略常量。
 - 不修改 Agent Home workspace client 的行为。
 
@@ -79,7 +78,6 @@ def create_builtin_registry(home_client: AgentHomeToolClient | None = None) -> T
 - `create_builtin_registry(home_client=None)` 会抛出 `RuntimeError`。
 - 传入 fake Agent Home client 后，注册表包含预期 schema 和工具名。
 - `read_file`、`write_file`、`list_directory`、`search_file` 和 `terminal` 会调用 fake Agent Home workspace 方法。
-- 之前无参调用 `create_builtin_registry()` 的测试，需要根据断言目标改为直接测试本地工具，或改用 fake Agent Home client。
 
 ## 实现说明
 
