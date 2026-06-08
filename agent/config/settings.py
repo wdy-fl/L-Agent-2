@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-import hashlib
 
 import yaml
 
@@ -41,7 +40,6 @@ class AgentSettings:
 
 @dataclass
 class AgentHomeSettings:
-    enabled: bool = True
     base_url: str = "http://127.0.0.1:8765"
     agent_id: str = ""
     token: str = ""
@@ -75,17 +73,11 @@ DEFAULT_CONFIG_PATHS = [
 ]
 
 
-def default_agent_id(project_root: Path | None = None) -> str:
-    root = (project_root or Path.cwd()).resolve()
-    digest = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:16]
-    return f"l-agent:{digest}"
-
-
 def load_settings(config_path: Path | None = None) -> Settings:
     path = _resolve_path(config_path)
     if path is None:
         settings = Settings()
-        settings.agent_home.agent_id = default_agent_id(Path.cwd())
+        _require_agent_id(settings)
         return settings
 
     with open(path) as f:
@@ -93,8 +85,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
 
     settings = _parse(data)
     settings.config_dir = path.parent
-    if not settings.agent_home.agent_id:
-        settings.agent_home.agent_id = default_agent_id(path.parent)
+    _require_agent_id(settings)
     return settings
 
 
@@ -105,6 +96,11 @@ def _resolve_path(config_path: Path | None) -> Path | None:
         if p.exists():
             return p
     return None
+
+
+def _require_agent_id(settings: Settings) -> None:
+    if not settings.agent_home.agent_id:
+        raise RuntimeError("agent_home.agent_id is required. Set it in workspace/config.yaml or ~/.l-agent/config.yaml")
 
 
 def _parse(data: dict[str, Any]) -> Settings:

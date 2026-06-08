@@ -17,7 +17,7 @@ from agent.cli.approval import ApprovalHandler
 from agent.cli.commands import CommandDispatcher
 from agent.cli.config import load_approval_config
 from agent.cli.render import Renderer
-from agent.config.settings import DEFAULT_CONFIG_PATHS, load_settings
+from agent.config.settings import load_settings
 from agent.core.context import RunContext
 from agent.core.factory import build_runner
 from agent.core.runner import AgentRunner
@@ -169,9 +169,6 @@ class CLISession:
 def _resolve_cli_config_path(config: str | None) -> Path:
     if config:
         return Path(config)
-    for path in DEFAULT_CONFIG_PATHS:
-        if path.exists():
-            return path
     return Path("workspace/config.yaml")
 
 
