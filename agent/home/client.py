@@ -334,5 +334,5 @@ def initialize_agent_home(settings: Settings, config_path: Path | None, transpor
     if config_path is None:
         raise AgentHomeError("agent_home_config_missing", "cannot persist Agent-Home token without a config path", {})
     token = client.create_agent()
-    write_agent_home_credentials(config_path, home.agent_id, token)
+    write_agent_home_credentials(config_path, token)
     return client

@@ -119,12 +119,11 @@ def _parse(data: dict[str, Any]) -> Settings:
     )
 
 
-def write_agent_home_credentials(config_path: Path, agent_id: str, token: str) -> None:
+def write_agent_home_credentials(config_path: Path, token: str) -> None:
     data: dict[str, Any] = {}
     if config_path.exists():
         data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     data.setdefault("agent_home", {})
-    data["agent_home"]["agent_id"] = agent_id
     data["agent_home"]["token"] = token
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
