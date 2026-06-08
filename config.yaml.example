@@ -33,25 +33,15 @@ context:
 # Agent 人设与行为引导
 # ═══════════════════════════════════════════
 agent:
-  guidance_file: "knowledge/guidance.md"
+  guidance_file: ""
 
 # ═══════════════════════════════════════════
-# 工具审批策略
+# Agent Home 集成配置
 # ═══════════════════════════════════════════
-approval:
-  auto_approve:
-    - think
-    - read_file
-    - list_directory
-    - search_file
-    - web_search
-    - web_fetch
-  always_confirm:
-    - terminal
-    - write_file
-
-# ═══════════════════════════════════════════
-# 存储配置
-# ═══════════════════════════════════════════
-storage:
-  db_path: "workspace/timeline.db"
+agent_home:
+  base_url: "http://127.0.0.1:8765"
+  agent_id: ""
+  token: ""
+  auto_create_agent: true
+  auto_extract_memory: false
+  memory_prefetch_limit: 5
