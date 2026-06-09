@@ -27,7 +27,7 @@ budget:
   max_tokens: 200000
 
 agent:
-  guidance_file: "knowledge/guidance.md"
+  agent_file_path: "/AGENT.md"
 ```
 
 ### 启动
