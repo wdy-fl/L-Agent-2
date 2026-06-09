@@ -2,7 +2,7 @@ import pytest
 
 from agent.core.context import RunContext
 from agent.llm.types import ModelConfig
-from agent.steps.before_agent import BaseContextLoadStaticParts
+from agent.steps.before_agent import BaseContextLoadStaticParts, MessageCommitUser
 
 
 class FakeHomeClient:
@@ -15,6 +15,15 @@ class FakeHomeClient:
         if path not in self.files:
             raise FileNotFoundError(path)
         return self.files[path]
+
+
+def test_message_commit_user_initializes_visible_messages_without_timeline_store():
+    ctx = RunContext(input="hello")
+    step = MessageCommitUser()
+
+    step.run(ctx)
+
+    assert ctx.messages == [{"role": "user", "content": "hello"}]
 
 
 def test_load_static_parts_loads_agent_file_from_agent_home():

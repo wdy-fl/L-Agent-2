@@ -147,6 +147,9 @@ class MessageCommitUser(Step):
         super().__init__("message.commit_user", HookPhase.before_agent)
 
     def run(self, ctx: RunContext) -> None:
+        if not ctx.messages:
+            ctx.messages = [{"role": "user", "content": ctx.input}]
+
         store = ctx.timeline_store
         if store is None:
             return

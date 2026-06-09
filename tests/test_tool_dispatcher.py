@@ -30,14 +30,13 @@ from agent.steps.before_agent import (
     BaseContextLoadStaticParts,
     BudgetInitialize,
     ContextInitialize,
-    InputNormalize,
     MemoryPrefetch,
+    MessageCommitUser,
     ToolsSnapshotAvailableTools,
 )
 from agent.steps.before_model import (
     ContextPrepareWithBudget,
     IterationCreate,
-    MessagesCollectVisible,
     ModelRequestCompose,
 )
 from agent.steps.before_tool import (
@@ -67,18 +66,17 @@ def _build_full_registry(tool_registry: ToolRegistry | None = None) -> StepRegis
 
     # before_agent
     reg.register(ContextInitialize())
-    reg.register(InputNormalize())
     reg.register(BaseContextLoadStaticParts(
         guidance="You are a helpful assistant.\n\nBe concise.",
         model_config=ModelConfig(),
     ))
+    reg.register(MessageCommitUser())
     reg.register(MemoryPrefetch())
     reg.register(ToolsSnapshotAvailableTools(registry=tr))
     reg.register(BudgetInitialize(max_iterations=10, max_tokens=100_000))
 
     # before_model
     reg.register(IterationCreate())
-    reg.register(MessagesCollectVisible())
     reg.register(ContextPrepareWithBudget())
     reg.register(ModelRequestCompose())
 

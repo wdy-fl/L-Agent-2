@@ -28,7 +28,6 @@ from agent.steps.before_agent import (
     BudgetInitialize,
     CheckpointCreateUserSnapshot,
     ContextInitialize,
-    InputNormalize,
     MemoryPrefetch,
     MessageCommitUser,
     RunCreate,
@@ -37,7 +36,6 @@ from agent.steps.before_agent import (
 from agent.steps.before_model import (
     ContextPrepareWithBudget,
     IterationCreate,
-    MessagesCollectVisible,
     ModelRequestCompose,
 )
 from agent.steps.before_tool import (
@@ -90,7 +88,6 @@ def build_runner(config_path: Path | None = None, home_client=None) -> AgentRunn
     ))
 
     reg.register(IterationCreate())
-    reg.register(MessagesCollectVisible())
 
     chain = MiddlewareChain()
     chain.add(BudgetGuard())

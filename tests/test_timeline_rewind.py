@@ -8,7 +8,6 @@ from agent.steps.after_agent import BranchUpdateResumeHead, CheckpointRecordRunT
 from agent.steps.after_model import MessageCommitAssistant, ResultDetectFinalAnswer, ToolDetectRequested, UsageUpdate
 from agent.steps.after_tool import CheckpointRecordToolResultsCommitted, MessageCommitToolResults
 from agent.steps.before_agent import (
-    BranchResolveActive,
     BudgetInitialize,
     CheckpointCreateUserSnapshot,
     ContextInitialize,
@@ -26,7 +25,6 @@ from agent.timeline.session_factory import create_session_with_default_branch
 def _build_full_registry() -> StepRegistry:
     reg = StepRegistry()
     reg.register(ContextInitialize())
-    reg.register(BranchResolveActive())
     reg.register(BudgetInitialize())
     reg.register(RunCreate())
     reg.register(MessageCommitUser())

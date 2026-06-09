@@ -8,7 +8,6 @@ from agent.steps.after_agent import BranchUpdateResumeHead, CheckpointRecordRunT
 from agent.steps.after_model import MessageCommitAssistant, ResultDetectFinalAnswer, ToolDetectRequested, UsageUpdate
 from agent.steps.after_tool import CheckpointRecordToolResultsCommitted, MessageCommitToolResults
 from agent.steps.before_agent import (
-    BranchResolveActive,
     BudgetInitialize,
     CheckpointCreateUserSnapshot,
     ContextInitialize,
@@ -26,7 +25,6 @@ from agent.timeline.session_factory import create_session_with_default_branch
 def _build_full_registry() -> StepRegistry:
     reg = StepRegistry()
     reg.register(ContextInitialize())
-    reg.register(BranchResolveActive())
     reg.register(BudgetInitialize())
     reg.register(RunCreate())
     reg.register(MessageCommitUser())
@@ -65,28 +63,6 @@ class TestSessionFactory:
         assert branch is not None
         assert branch.session_id == session.session_id
         assert branch.parent_branch_id == ""
-
-
-class TestBranchResolveActive:
-    def test_resolves_branch_from_session(self):
-        store = SQLiteTimelineStore(":memory:")
-        session = create_session_with_default_branch(store)
-
-        ctx = RunContext(input="hello", session_id=session.session_id, timeline_store=store)
-        step = BranchResolveActive()
-        step.run(ctx)
-
-        assert ctx.branch_id == session.active_branch_id
-
-    def test_does_not_override_existing_branch_id(self):
-        store = SQLiteTimelineStore(":memory:")
-        session = create_session_with_default_branch(store)
-
-        ctx = RunContext(input="hello", session_id=session.session_id, branch_id="custom-branch", timeline_store=store)
-        step = BranchResolveActive()
-        step.run(ctx)
-
-        assert ctx.branch_id == "custom-branch"
 
 
 class TestBranchUpdateResumeHead:
