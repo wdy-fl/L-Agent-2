@@ -31,13 +31,11 @@ class BaseContextLoadStaticParts(Step):
     def __init__(
         self,
         guidance: str = "",
-        workspace_context: str = "",
         model_config: ModelConfig | None = None,
         agent_file_path: str = "",
     ) -> None:
         super().__init__("base_context.load_static_parts", HookPhase.before_agent)
         self._guidance = guidance
-        self._workspace_context = workspace_context
         self._model_config = model_config or ModelConfig()
         self._agent_file_path = agent_file_path
 
@@ -48,7 +46,6 @@ class BaseContextLoadStaticParts(Step):
 
         ctx.base_model_context = BaseModelContext(
             guidance=guidance,
-            workspace_context=self._workspace_context,
             model_config=self._model_config,
         )
 
