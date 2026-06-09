@@ -44,18 +44,36 @@ class BaseContextLoadStaticParts(Step):
         guidance: str = "",
         workspace_context: str = "",
         model_config: ModelConfig | None = None,
+        agent_file_path: str = "",
     ) -> None:
         super().__init__("base_context.load_static_parts", HookPhase.before_agent)
         self._guidance = guidance
         self._workspace_context = workspace_context
         self._model_config = model_config or ModelConfig()
+        self._agent_file_path = agent_file_path
 
     def run(self, ctx: RunContext) -> None:
+        guidance = self._guidance
+        if self._agent_file_path:
+            guidance = self._load_agent_file(ctx)
+
         ctx.base_model_context = BaseModelContext(
-            guidance=self._guidance,
+            guidance=guidance,
             workspace_context=self._workspace_context,
             model_config=self._model_config,
         )
+
+    def _load_agent_file(self, ctx: RunContext) -> str:
+        path = self._agent_file_path
+        home_client = ctx.home_client
+        workspace_get_text = getattr(home_client, "workspace_get_text", None)
+        if not callable(workspace_get_text):
+            raise RuntimeError(f"Failed to load agent file from Agent Home workspace: {path}")
+        get_text = cast(Callable[[str], str], workspace_get_text)
+        try:
+            return get_text(path).strip()
+        except Exception as exc:
+            raise RuntimeError(f"Failed to load agent file from Agent Home workspace: {path}") from exc
 
 
 class MemoryPrefetch(Step):
