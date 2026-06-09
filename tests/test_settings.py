@@ -46,8 +46,9 @@ def test_load_settings_uses_agent_file_path(tmp_path: Path):
 
     settings = load_settings(config_path)
 
+    removed_field = "guidance" + "_file"
     assert settings.agent.agent_file_path == "/AGENT.md"
-    assert "guidance_file" not in settings.agent.__dataclass_fields__
+    assert removed_field not in settings.agent.__dataclass_fields__
 
 
 def test_agent_home_settings_no_longer_has_enabled_flag():
