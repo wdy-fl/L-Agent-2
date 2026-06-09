@@ -34,6 +34,22 @@ def test_load_settings_uses_configured_agent_id(tmp_path: Path):
     assert settings.agent_home.token == "tok"
 
 
+def test_load_settings_uses_agent_file_path(tmp_path: Path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "agent:\n"
+        "  agent_file_path: /AGENT.md\n"
+        "agent_home:\n"
+        "  agent_id: l-agent:configured\n",
+        encoding="utf-8",
+    )
+
+    settings = load_settings(config_path)
+
+    assert settings.agent.agent_file_path == "/AGENT.md"
+    assert "guidance_file" not in settings.agent.__dataclass_fields__
+
+
 def test_agent_home_settings_no_longer_has_enabled_flag():
     assert "enabled" not in AgentHomeSettings.__dataclass_fields__
     assert not hasattr(AgentHomeSettings(), "enabled")

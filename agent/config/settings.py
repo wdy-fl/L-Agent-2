@@ -35,7 +35,7 @@ class BudgetSettings:
 
 @dataclass
 class AgentSettings:
-    guidance_file: str = ""
+    agent_file_path: str = ""
 
 
 @dataclass
@@ -56,15 +56,6 @@ class Settings:
     agent: AgentSettings = field(default_factory=AgentSettings)
     agent_home: AgentHomeSettings = field(default_factory=AgentHomeSettings)
     config_dir: Path = field(default_factory=lambda: Path("."))
-
-    def resolve_file(self, relative_path: str) -> str:
-        """Read a file path relative to config directory, return its content."""
-        if not relative_path:
-            return ""
-        p = self.config_dir / relative_path
-        if not p.exists():
-            return ""
-        return p.read_text(encoding="utf-8").strip()
 
 
 DEFAULT_CONFIG_PATHS = [
