@@ -53,9 +53,11 @@ def test_factory_registers_timeline_creation_before_finalize(tmp_path):
     runner = build_runner(config_path, home_client=FakeHome())
     names = [step.name for step in runner._registry.get_steps(HookPhase.before_agent)]
 
+    assert "context.initialize" in names
     assert "run.create" in names
     assert "message.commit_user" in names
     assert "checkpoint.create_user_snapshot" in names
+    assert names.index("context.initialize") < names.index("run.create")
     assert names.index("run.create") < names.index("message.commit_user")
     assert names.index("message.commit_user") < names.index("checkpoint.create_user_snapshot")
 

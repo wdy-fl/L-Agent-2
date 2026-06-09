@@ -25,17 +25,6 @@ class IterationCreate(Step):
         ctx.budget.consumed_iterations += 1
 
 
-class MessagesCollectVisible(Step):
-    """Collect visible messages for this iteration's model call."""
-
-    def __init__(self) -> None:
-        super().__init__("messages.collect_visible", HookPhase.before_model)
-
-    def run(self, ctx: RunContext) -> None:
-        if not ctx.messages:
-            ctx.messages = [{"role": "user", "content": ctx.input}]
-
-
 class ContextPrepareWithBudget(Step):
     """Compress or truncate messages to fit context window.
 

@@ -12,10 +12,18 @@ from agent.tools.registry import ToolRegistry
 
 
 class ContextInitialize(Step):
-    """Create RunContext basic fields, initialize empty iterations list."""
+    """Create RunContext fields and initialize base model context."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        guidance: str = "",
+        model_config: ModelConfig | None = None,
+        agent_file_path: str = "",
+    ) -> None:
         super().__init__("context.initialize", HookPhase.before_agent)
+        self._guidance: str = guidance
+        self._model_config: ModelConfig = model_config or ModelConfig()
+        self._agent_file_path: str = agent_file_path
 
     def run(self, ctx: RunContext) -> None:
         if not ctx.run_id:
@@ -24,22 +32,6 @@ class ContextInitialize(Step):
         ctx.iteration_index = 0
         ctx.status = "running"
 
-
-class BaseContextLoadStaticParts(Step):
-    """Load AGENT.md into ctx.base_model_context."""
-
-    def __init__(
-        self,
-        guidance: str = "",
-        model_config: ModelConfig | None = None,
-        agent_file_path: str = "",
-    ) -> None:
-        super().__init__("base_context.load_static_parts", HookPhase.before_agent)
-        self._guidance = guidance
-        self._model_config = model_config or ModelConfig()
-        self._agent_file_path = agent_file_path
-
-    def run(self, ctx: RunContext) -> None:
         guidance = self._guidance
         if self._agent_file_path:
             guidance = self._load_agent_file(ctx)
@@ -147,6 +139,9 @@ class MessageCommitUser(Step):
         super().__init__("message.commit_user", HookPhase.before_agent)
 
     def run(self, ctx: RunContext) -> None:
+        if not ctx.messages:
+            ctx.messages = [{"role": "user", "content": ctx.input}]
+
         store = ctx.timeline_store
         if store is None:
             return

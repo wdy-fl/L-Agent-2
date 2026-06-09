@@ -21,17 +21,15 @@ from agent.steps.after_model import (
     UsageUpdate,
 )
 from agent.steps.before_agent import (
-    BaseContextLoadStaticParts,
     BudgetInitialize,
     ContextInitialize,
-    InputNormalize,
     MemoryPrefetch,
+    MessageCommitUser,
     ToolsSnapshotAvailableTools,
 )
 from agent.steps.before_model import (
     ContextPrepareWithBudget,
     IterationCreate,
-    MessagesCollectVisible,
     ModelRequestCompose,
 )
 from agent.steps.registry import StepRegistry
@@ -52,19 +50,17 @@ def _build_full_registry(model_config: ModelConfig | None = None) -> StepRegistr
     reg = StepRegistry()
 
     # before_agent
-    reg.register(ContextInitialize())
-    reg.register(InputNormalize())
-    reg.register(BaseContextLoadStaticParts(
+    reg.register(ContextInitialize(
         guidance="You are a helpful assistant.\n\nBe concise.",
         model_config=model_config or ModelConfig(),
     ))
+    reg.register(MessageCommitUser())
     reg.register(MemoryPrefetch())
     reg.register(ToolsSnapshotAvailableTools())
     reg.register(BudgetInitialize(max_iterations=10, max_tokens=100_000))
 
     # before_model
     reg.register(IterationCreate())
-    reg.register(MessagesCollectVisible())
     reg.register(ContextPrepareWithBudget())
     reg.register(ModelRequestCompose())
 
@@ -112,8 +108,7 @@ class TestIntegrationFullLifecycle:
 
         assert result.status == "completed"
         assert result.final_result == "Hello! How can I help you?"
-        assert result.input == "Hello world"
-        assert result.raw_input == "  Hello world  "
+        assert result.input == "  Hello world  "
         assert result.iteration_index == 1
         assert len(result.iterations) == 1
         assert result.budget.consumed_input_tokens == 20
@@ -258,14 +253,12 @@ class TestBudgetGuard:
         client = CountingClient()
         # Use a custom low-budget registry
         reg = StepRegistry()
-        reg.register(ContextInitialize())
-        reg.register(InputNormalize())
-        reg.register(BaseContextLoadStaticParts(guidance="test"))
+        reg.register(ContextInitialize(guidance="test"))
+        reg.register(MessageCommitUser())
         reg.register(MemoryPrefetch())
         reg.register(ToolsSnapshotAvailableTools())
         reg.register(BudgetInitialize(max_iterations=10, max_tokens=100_000))
         reg.register(IterationCreate())
-        reg.register(MessagesCollectVisible())
         reg.register(ContextPrepareWithBudget())
         reg.register(ModelRequestCompose())
         reg.register(ModelCaptureResponse())

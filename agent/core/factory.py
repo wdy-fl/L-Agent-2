@@ -24,11 +24,9 @@ from agent.steps.after_model import (
 )
 from agent.steps.after_tool import MessageCommitToolResults, ToolResultsCapture
 from agent.steps.before_agent import (
-    BaseContextLoadStaticParts,
     BudgetInitialize,
     CheckpointCreateUserSnapshot,
     ContextInitialize,
-    InputNormalize,
     MemoryPrefetch,
     MessageCommitUser,
     RunCreate,
@@ -37,7 +35,6 @@ from agent.steps.before_agent import (
 from agent.steps.before_model import (
     ContextPrepareWithBudget,
     IterationCreate,
-    MessagesCollectVisible,
     ModelRequestCompose,
 )
 from agent.steps.before_tool import (
@@ -74,8 +71,7 @@ def build_runner(config_path: Path | None = None, home_client=None) -> AgentRunn
     dispatcher = ToolDispatcher(tool_registry)
 
     reg = StepRegistry()
-    reg.register(ContextInitialize())
-    reg.register(BaseContextLoadStaticParts(
+    reg.register(ContextInitialize(
         agent_file_path=settings.agent.agent_file_path,
         model_config=model_config,
     ))
@@ -90,7 +86,6 @@ def build_runner(config_path: Path | None = None, home_client=None) -> AgentRunn
     ))
 
     reg.register(IterationCreate())
-    reg.register(MessagesCollectVisible())
 
     chain = MiddlewareChain()
     chain.add(BudgetGuard())

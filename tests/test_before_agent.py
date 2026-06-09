@@ -2,7 +2,7 @@ import pytest
 
 from agent.core.context import RunContext
 from agent.llm.types import ModelConfig
-from agent.steps.before_agent import BaseContextLoadStaticParts
+from agent.steps.before_agent import ContextInitialize, MessageCommitUser
 
 
 class FakeHomeClient:
@@ -17,9 +17,18 @@ class FakeHomeClient:
         return self.files[path]
 
 
-def test_load_static_parts_loads_agent_file_from_agent_home():
+def test_message_commit_user_initializes_visible_messages_without_timeline_store():
+    ctx = RunContext(input="hello")
+    step = MessageCommitUser()
+
+    step.run(ctx)
+
+    assert ctx.messages == [{"role": "user", "content": "hello"}]
+
+
+def test_context_initialize_loads_agent_file_from_agent_home():
     ctx = RunContext(home_client=FakeHomeClient({"/AGENT.md": "  Use Agent Home.\n"}))
-    step = BaseContextLoadStaticParts(
+    step = ContextInitialize(
         agent_file_path="/AGENT.md",
         model_config=ModelConfig(model="test-model"),
     )
@@ -32,9 +41,9 @@ def test_load_static_parts_loads_agent_file_from_agent_home():
     assert ctx.home_client.read_paths == ["/AGENT.md"]
 
 
-def test_load_static_parts_keeps_inline_guidance_when_agent_file_path_empty():
+def test_context_initialize_keeps_inline_guidance_when_agent_file_path_empty():
     ctx = RunContext()
-    step = BaseContextLoadStaticParts(guidance="Inline guidance")
+    step = ContextInitialize(guidance="Inline guidance")
 
     step.run(ctx)
 
@@ -42,17 +51,17 @@ def test_load_static_parts_keeps_inline_guidance_when_agent_file_path_empty():
     assert ctx.base_model_context.guidance == "Inline guidance"
 
 
-def test_load_static_parts_requires_home_client_for_agent_file_path():
+def test_context_initialize_requires_home_client_for_agent_file_path():
     ctx = RunContext()
-    step = BaseContextLoadStaticParts(agent_file_path="/AGENT.md")
+    step = ContextInitialize(agent_file_path="/AGENT.md")
 
     with pytest.raises(RuntimeError, match="Failed to load agent file from Agent Home workspace: /AGENT.md"):
         step.run(ctx)
 
 
-def test_load_static_parts_wraps_agent_home_read_errors():
+def test_context_initialize_wraps_agent_home_read_errors():
     ctx = RunContext(home_client=FakeHomeClient({}))
-    step = BaseContextLoadStaticParts(agent_file_path="/AGENT.md")
+    step = ContextInitialize(agent_file_path="/AGENT.md")
 
     with pytest.raises(RuntimeError, match="Failed to load agent file from Agent Home workspace: /AGENT.md"):
         step.run(ctx)

@@ -136,7 +136,7 @@ class TestSessionManagementCommands:
         from agent.steps.after_agent import BranchUpdateResumeHead, CheckpointRecordRunTerminalState, RunMarkTerminalState
         from agent.steps.after_model import MessageCommitAssistant, ResultDetectFinalAnswer, UsageUpdate
         from agent.steps.before_agent import (
-            BranchResolveActive, BudgetInitialize, CheckpointCreateUserSnapshot,
+            BudgetInitialize, CheckpointCreateUserSnapshot,
             ContextInitialize, MessageCommitUser, RunCreate,
         )
 
@@ -145,7 +145,6 @@ class TestSessionManagementCommands:
 
         reg = StepRegistry()
         reg.register(ContextInitialize())
-        reg.register(BranchResolveActive())
         reg.register(BudgetInitialize())
         reg.register(RunCreate())
         reg.register(MessageCommitUser())
@@ -244,7 +243,7 @@ class TestFullConversationFlow:
         from agent.steps.after_agent import BranchUpdateResumeHead, CheckpointRecordRunTerminalState, RunMarkTerminalState
         from agent.steps.after_model import MessageCommitAssistant, ResultDetectFinalAnswer, UsageUpdate
         from agent.steps.before_agent import (
-            BranchResolveActive, BudgetInitialize, CheckpointCreateUserSnapshot,
+            BudgetInitialize, CheckpointCreateUserSnapshot,
             ContextInitialize, MessageCommitUser, RunCreate,
         )
 
@@ -253,7 +252,6 @@ class TestFullConversationFlow:
 
         reg = StepRegistry()
         reg.register(ContextInitialize())
-        reg.register(BranchResolveActive())
         reg.register(BudgetInitialize())
         reg.register(RunCreate())
         reg.register(MessageCommitUser())
