@@ -75,7 +75,6 @@ def build_runner(config_path: Path | None = None, home_client=None) -> AgentRunn
 
     reg = StepRegistry()
     reg.register(ContextInitialize())
-    reg.register(InputNormalize())
     reg.register(BaseContextLoadStaticParts(
         agent_file_path=settings.agent.agent_file_path,
         model_config=model_config,

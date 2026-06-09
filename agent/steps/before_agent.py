@@ -25,19 +25,8 @@ class ContextInitialize(Step):
         ctx.status = "running"
 
 
-class InputNormalize(Step):
-    """Normalize user input: strip whitespace, record raw input."""
-
-    def __init__(self) -> None:
-        super().__init__("input.normalize", HookPhase.before_agent)
-
-    def run(self, ctx: RunContext) -> None:
-        ctx.raw_input = ctx.input
-        ctx.input = ctx.input.strip()
-
-
 class BaseContextLoadStaticParts(Step):
-    """Load guidance / workspace into ctx.base_model_context."""
+    """Load AGENT.md into ctx.base_model_context."""
 
     def __init__(
         self,
