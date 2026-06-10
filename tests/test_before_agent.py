@@ -98,6 +98,37 @@ def test_context_initialize_loads_history_without_loading_guidance():
     assert second_ctx.home_client.read_paths == []
 
 
+def test_message_commit_user_appends_enhanced_input_after_context_initialize_history():
+    store = SQLiteTimelineStore(":memory:")
+    session = create_session_with_default_branch(store)
+    first_ctx = RunContext(
+        session_id=session.session_id,
+        branch_id=session.active_branch_id,
+        timeline_store=store,
+    )
+    ContextInitialize(guidance="First guidance").run(first_ctx)
+
+    ctx = RunContext(
+        input="hello",
+        enhanced_input="hello\n\nMemory:\n- [fact] remembered",
+        session_id=session.session_id,
+        branch_id=session.active_branch_id,
+        timeline_store=store,
+    )
+
+    ContextInitialize(guidance="Ignored guidance").run(ctx)
+    MessageCommitUser().run(ctx)
+
+    assert ctx.messages == [
+        {"role": "system", "content": "First guidance"},
+        {"role": "user", "content": "hello\n\nMemory:\n- [fact] remembered"},
+    ]
+    persisted = store.get_messages_by_branch(session.active_branch_id)
+    assert len(persisted) == 2
+    assert persisted[1].role == "user"
+    assert persisted[1].content == "hello\n\nMemory:\n- [fact] remembered"
+
+
 def test_context_initialize_loads_agent_file_from_agent_home():
     store = SQLiteTimelineStore(":memory:")
     session = create_session_with_default_branch(store)

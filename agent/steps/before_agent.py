@@ -171,8 +171,7 @@ class MessageCommitUser(Step):
 
     def run(self, ctx: RunContext) -> None:
         content = ctx.enhanced_input or ctx.input
-        if not ctx.messages:
-            ctx.messages = [{"role": "user", "content": content}]
+        ctx.messages.append({"role": "user", "content": content})
 
         store = ctx.timeline_store
         if store is None:
