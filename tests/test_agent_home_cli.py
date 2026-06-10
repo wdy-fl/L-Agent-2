@@ -57,8 +57,8 @@ def test_factory_registers_timeline_creation_before_finalize(tmp_path):
     assert "run.create" in names
     assert "message.commit_user" in names
     assert "checkpoint.create_user_snapshot" in names
-    assert names.index("context.initialize") < names.index("run.create")
-    assert names.index("run.create") < names.index("message.commit_user")
+    assert names.index("run.create") < names.index("context.initialize")
+    assert names.index("context.initialize") < names.index("message.commit_user")
     assert names.index("message.commit_user") < names.index("checkpoint.create_user_snapshot")
 
 

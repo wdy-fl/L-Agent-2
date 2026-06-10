@@ -71,11 +71,11 @@ def build_runner(config_path: Path | None = None, home_client=None) -> AgentRunn
     dispatcher = ToolDispatcher(tool_registry)
 
     reg = StepRegistry()
+    reg.register(RunCreate())
     reg.register(ContextInitialize(
         agent_file_path=settings.agent.agent_file_path,
         model_config=model_config,
     ))
-    reg.register(RunCreate())
     reg.register(MemoryPrefetch(limit=settings.agent_home.memory_prefetch_limit))
     reg.register(MessageCommitUser())
     reg.register(CheckpointCreateUserSnapshot())

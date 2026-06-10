@@ -209,7 +209,12 @@ class AgentHomeClient(TimelineStore):
         return self._json_to_run(body)
 
     def update_run_status(self, run_id: str, status: RunStatus) -> None:
-        self._request("PATCH", f"/v1/agents/{self.agent_id}/runs/{run_id}/status", json={"status": status.value})
+        try:
+            self._request("PATCH", f"/v1/agents/{self.agent_id}/runs/{run_id}/status", json={"status": status.value})
+        except AgentHomeError as exc:
+            if exc.code in {"not_found", "run_not_found"}:
+                return
+            raise
 
     def get_latest_run_by_branch(self, branch_id: str) -> AgentRun | None:
         try:

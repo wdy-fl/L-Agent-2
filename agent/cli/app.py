@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -126,6 +127,7 @@ class CLISession:
             input=user_input,
             session_id=self._session_id,
             branch_id=self._branch_id,
+            run_id=str(uuid.uuid4()),
             timeline_store=self._store,
             home_client=self._store,
             auto_approve_tools=self._approval._auto_approve,

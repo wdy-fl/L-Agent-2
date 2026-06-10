@@ -82,8 +82,8 @@ def test_production_before_agent_registration_order(monkeypatch):
 
     names = [step.name for step in runner._registry.get_steps(HookPhase.before_agent)]
     assert names == [
-        "context.initialize",
         "run.create",
+        "context.initialize",
         "memory.prefetch",
         "message.commit_user",
         "checkpoint.create_user_snapshot",
