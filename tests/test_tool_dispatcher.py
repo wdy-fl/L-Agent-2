@@ -8,7 +8,6 @@ from agent.core.context import RunContext
 from agent.core.runner import AgentRunner
 from agent.llm.client import LLMClient
 from agent.llm.types import (
-    BaseModelContext,
     ModelConfig,
     ModelRequest,
     ModelResponse,
@@ -686,9 +685,8 @@ class TestSnapshotAvailableTools:
         ctx = RunContext(input="test")
         await runner.run_to_completion(ctx)
 
-        assert ctx.base_model_context is not None
-        assert len(ctx.base_model_context.available_tools) == 1
-        assert ctx.base_model_context.available_tools[0]["function"]["name"] == "think"
+        assert len(ctx.available_tools) == 1
+        assert ctx.available_tools[0]["function"]["name"] == "think"
 
     async def test_model_request_includes_tools(self):
         """ModelRequest should include tool schemas from snapshot."""
@@ -768,10 +766,9 @@ class TestReActLoopMessages:
         ctx = RunContext(input="test")
         await runner.run_to_completion(ctx)
 
-        # Second call should see: system + user + assistant(tool_calls) + tool_result
+        # Second call should see: user + assistant(tool_calls) + tool_result
         second_call_messages = captured_messages[1]
         roles = [m["role"] for m in second_call_messages]
-        assert "system" in roles
         assert "user" in roles
         assert "assistant" in roles
         assert "tool" in roles

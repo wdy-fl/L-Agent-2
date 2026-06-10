@@ -101,10 +101,8 @@ class ToolCallsValidateSchema(Step):
                     break
 
     def _get_available_tools(self, ctx: RunContext) -> dict[str, Any]:
-        if ctx.base_model_context is None:
-            return {}
         tools_map: dict[str, Any] = {}
-        for tool_schema in ctx.base_model_context.available_tools:
+        for tool_schema in ctx.available_tools:
             func_def = tool_schema.get("function", {})
             name = func_def.get("name", "")
             if name:
@@ -132,10 +130,8 @@ class ToolCallsResolveTools(Step):
                 call.error = f"Tool not available: {call.tool_name}"
 
     def _get_available_tool_names(self, ctx: RunContext) -> set[str]:
-        if ctx.base_model_context is None:
-            return set()
         names: set[str] = set()
-        for tool_schema in ctx.base_model_context.available_tools:
+        for tool_schema in ctx.available_tools:
             func_def = tool_schema.get("function", {})
             name = func_def.get("name", "")
             if name:

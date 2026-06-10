@@ -12,7 +12,7 @@ from agent.tools.registry import ToolRegistry
 
 
 class ContextInitialize(Step):
-    """Create RunContext fields and initialize base model context."""
+    """Create RunContext fields."""
 
     def __init__(
         self,
@@ -52,15 +52,13 @@ class ContextInitialize(Step):
 
 
 class MemoryPrefetch(Step):
-    """Prefetch matching memories into base model context."""
+    """Prefetch matching memories into enhanced input."""
 
     def __init__(self, limit: int = 5) -> None:
         super().__init__("memory.prefetch", HookPhase.before_agent)
         self._limit = limit
 
     def run(self, ctx: RunContext) -> None:
-        if ctx.base_model_context is None:
-            return
         search_memory = None
         for store in (ctx.home_client, ctx.timeline_store):
             candidate = getattr(store, "search_memory", None)
@@ -68,32 +66,29 @@ class MemoryPrefetch(Step):
                 search_memory = candidate
                 break
         if search_memory is None:
-            ctx.base_model_context.memory_context = None
             return
         search = cast(Callable[[str], list[dict[str, Any]]], search_memory)
         memories = search(ctx.input)[: self._limit]
         if not memories:
-            ctx.base_model_context.memory_context = None
             return
         lines = ["Memory:"]
         lines.extend(f"- [{memory.get('type', '')}] {memory.get('content', '')}" for memory in memories)
-        ctx.base_model_context.memory_context = "\n".join(lines)
+        memory_context = "\n".join(lines)
+        ctx.enhanced_input = f"{ctx.input}\n\n{memory_context}"
 
 
 class ToolsSnapshotAvailableTools(Step):
-    """Snapshot available tools from ToolRegistry into ctx.base_model_context."""
+    """Snapshot available tools from ToolRegistry into ctx.available_tools."""
 
     def __init__(self, registry: ToolRegistry | None = None) -> None:
         super().__init__("tools.snapshot_available_tools", HookPhase.before_agent)
         self._registry = registry
 
     def run(self, ctx: RunContext) -> None:
-        if ctx.base_model_context is None:
-            return
         if self._registry is None:
-            ctx.base_model_context.available_tools = []
+            ctx.available_tools = []
         else:
-            ctx.base_model_context.available_tools = self._registry.list_schemas()
+            ctx.available_tools = self._registry.list_schemas()
 
 
 class BudgetInitialize(Step):

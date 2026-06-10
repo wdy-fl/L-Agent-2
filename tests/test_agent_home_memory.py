@@ -5,7 +5,6 @@ from rich.console import Console
 
 from agent.cli.commands import CommandDispatcher
 from agent.core.context import RunContext
-from agent.llm.types import BaseModelContext
 from agent.steps.after_agent import AgentHomeRunFinalize
 from agent.steps.before_agent import MemoryPrefetch
 from agent.timeline.models import Branch, Checkpoint, CheckpointKind, RunStatus
@@ -125,34 +124,31 @@ class FakeMemoryHome(FakeHome):
 
 def test_memory_prefetch_injects_matching_memories():
     home = FakeMemoryHome()
-    ctx = RunContext(input="python command?", base_model_context=BaseModelContext(), home_client=home)
+    ctx = RunContext(input="python command?", home_client=home)
 
     MemoryPrefetch(limit=5).run(ctx)
 
-    assert ctx.base_model_context is not None
-    assert ctx.base_model_context.memory_context == "Memory:\n- [preference] Use python3"
+    assert ctx.enhanced_input == "python command?\n\nMemory:\n- [preference] Use python3"
 
 
 def test_memory_prefetch_falls_back_to_timeline_store_when_home_lacks_memory_search():
     home = FakeHome()
     store = FakeMemoryHome()
-    ctx = RunContext(input="python command?", base_model_context=BaseModelContext(), home_client=home, timeline_store=cast(Any, store))
+    ctx = RunContext(input="python command?", home_client=home, timeline_store=cast(Any, store))
 
     MemoryPrefetch(limit=5).run(ctx)
 
-    assert ctx.base_model_context is not None
-    assert ctx.base_model_context.memory_context == "Memory:\n- [preference] Use python3"
+    assert ctx.enhanced_input == "python command?\n\nMemory:\n- [preference] Use python3"
 
 
 def test_memory_prefetch_respects_limit():
     home = FakeMemoryHome()
     home.memories.append({"type": "note", "content": "Use python3 for scripts", "tags": ["python"]})
-    ctx = RunContext(input="python command?", base_model_context=BaseModelContext(), home_client=home)
+    ctx = RunContext(input="python command?", home_client=home)
 
     MemoryPrefetch(limit=1).run(ctx)
 
-    assert ctx.base_model_context is not None
-    assert ctx.base_model_context.memory_context == "Memory:\n- [preference] Use python3"
+    assert ctx.enhanced_input == "python command?\n\nMemory:\n- [preference] Use python3"
 
 
 def test_memory_command_reports_when_store_does_not_support_memory():

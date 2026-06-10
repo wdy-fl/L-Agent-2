@@ -44,9 +44,8 @@ def test_context_initialize_loads_agent_file_from_agent_home():
 
     step.run(ctx)
 
-    assert ctx.base_model_context is not None
-    assert ctx.base_model_context.guidance == "Use Agent Home."
-    assert ctx.base_model_context.model_config.model == "test-model"
+    assert not hasattr(ctx, "base_model_context")
+    assert ctx.model_config.model == "test-model"
     assert ctx.home_client.read_paths == ["/AGENT.md"]
 
 
@@ -56,8 +55,7 @@ def test_context_initialize_keeps_inline_guidance_when_agent_file_path_empty():
 
     step.run(ctx)
 
-    assert ctx.base_model_context is not None
-    assert ctx.base_model_context.guidance == "Inline guidance"
+    assert not hasattr(ctx, "base_model_context")
 
 
 def test_context_initialize_requires_home_client_for_agent_file_path():

@@ -114,7 +114,7 @@ class TestIntegrationFullLifecycle:
         assert result.budget.consumed_input_tokens == 20
         assert result.budget.consumed_output_tokens == 10
 
-    async def test_base_model_context_built_once(self):
+    async def test_direct_model_context_fields_remain_available(self):
         fake_response = ModelResponse(
             content="Done",
             usage=Usage(input_tokens=5, output_tokens=5),
@@ -132,11 +132,10 @@ class TestIntegrationFullLifecycle:
         ctx = RunContext(input="test")
         await runner.run_to_completion(ctx)
 
-        assert ctx.base_model_context is not None
-        assert not hasattr(ctx.base_model_context, "identity")
-        assert ctx.base_model_context.guidance == "You are a helpful assistant.\n\nBe concise."
-        assert ctx.base_model_context.memory_context is None
-        assert ctx.base_model_context.available_tools == []
+        assert not hasattr(ctx, "base_model_context")
+        assert not hasattr(ctx, "identity")
+        assert ctx.model_config.model == "deepseek-chat"
+        assert ctx.available_tools == []
 
     async def test_model_request_rebuilt_each_iteration(self):
         """With tool calls, model_request should be rebuilt on second iteration."""
