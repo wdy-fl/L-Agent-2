@@ -11,6 +11,7 @@ from agent.steps.before_agent import (
     BudgetInitialize,
     CheckpointCreateUserSnapshot,
     ContextInitialize,
+    MemoryPrefetch,
     MessageCommitUser,
     RunCreate,
 )
@@ -22,11 +23,17 @@ from agent.timeline.rewind import rewind
 from agent.timeline.session_factory import create_session_with_default_branch
 
 
+class EmptyMemoryClient:
+    def search_memory(self, query: str) -> list[dict[str, str]]:
+        return []
+
+
 def _build_full_registry() -> StepRegistry:
     reg = StepRegistry()
     reg.register(ContextInitialize())
     reg.register(BudgetInitialize())
     reg.register(RunCreate())
+    reg.register(MemoryPrefetch())
     reg.register(MessageCommitUser())
     reg.register(CheckpointCreateUserSnapshot())
     reg.register(MessageCommitAssistant())
@@ -45,7 +52,13 @@ async def _run_agent(store: SQLiteTimelineStore, session_id: str, branch_id: str
     def model_fn(c: RunContext):
         return ModelResponse(content=f"reply to: {c.input}", usage=Usage(input_tokens=5, output_tokens=3))
 
-    ctx = RunContext(input=user_input, session_id=session_id, branch_id=branch_id, timeline_store=store)
+    ctx = RunContext(
+        input=user_input,
+        session_id=session_id,
+        branch_id=branch_id,
+        timeline_store=store,
+        home_client=EmptyMemoryClient(),
+    )
     reg = _build_full_registry()
     runner = AgentRunner(registry=reg, middleware_chain=MiddlewareChain(), model_call=model_fn)
     await runner.run_to_completion(ctx)

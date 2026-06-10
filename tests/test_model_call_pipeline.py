@@ -153,9 +153,10 @@ class TestIntegrationFullLifecycle:
 
         assert ctx.model_config.model == "deepseek-chat"
         assert ctx.available_tools == []
-        assert ctx.messages[0] == {"role": "system", "content": "You are a helpful assistant.
-
-Be concise."}
+        assert ctx.messages[0] == {
+            "role": "system",
+            "content": "You are a helpful assistant.\n\nBe concise.",
+        }
         persisted = ctx.timeline_store.get_messages_by_branch(ctx.branch_id)
         assert [message.role for message in persisted] == ["system", "user", "assistant"]
 

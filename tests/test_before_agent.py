@@ -204,9 +204,9 @@ def test_run_context_exposes_direct_model_request_fields():
     assert hasattr(ctx, "model_config")
     assert hasattr(ctx, "available_tools")
     assert hasattr(ctx, "enhanced_input")
-    assert ctx.model_config is None
+    assert isinstance(ctx.model_config, ModelConfig)
     assert ctx.available_tools == []
-    assert ctx.enhanced_input is None
+    assert ctx.enhanced_input == ""
 
 
 def test_model_request_compose_uses_messages_tools_and_model_config_directly():

@@ -13,6 +13,7 @@ from agent.steps.before_agent import (
     BudgetInitialize,
     CheckpointCreateUserSnapshot,
     ContextInitialize,
+    MemoryPrefetch,
     MessageCommitUser,
     RunCreate,
 )
@@ -22,13 +23,24 @@ from agent.timeline.models import Branch, CheckpointKind, RunStatus, Session
 from agent.tools.base import ToolResult
 
 
+class EmptyMemoryClient:
+    def search_memory(self, query: str) -> list[dict[str, str]]:
+        return []
+
+
 def _make_store_and_ctx(user_input: str = "hello") -> tuple[SQLiteTimelineStore, RunContext]:
     store = SQLiteTimelineStore(":memory:")
     session_id = str(uuid.uuid4())
     branch_id = str(uuid.uuid4())
     store.create_session(Session(session_id=session_id, active_branch_id=branch_id))
     store.create_branch(Branch(branch_id=branch_id, session_id=session_id))
-    ctx = RunContext(input=user_input, session_id=session_id, branch_id=branch_id, timeline_store=store)
+    ctx = RunContext(
+        input=user_input,
+        session_id=session_id,
+        branch_id=branch_id,
+        timeline_store=store,
+        home_client=EmptyMemoryClient(),
+    )
     return store, ctx
 
 
@@ -37,6 +49,7 @@ def _build_full_registry() -> StepRegistry:
     reg.register(ContextInitialize())
     reg.register(BudgetInitialize())
     reg.register(RunCreate())
+    reg.register(MemoryPrefetch())
     reg.register(MessageCommitUser())
     reg.register(CheckpointCreateUserSnapshot())
     reg.register(MessageCommitAssistant())
@@ -80,7 +93,7 @@ class TestFullAgentRunPersistence:
 
         msgs = store.get_messages_by_branch(ctx.branch_id)
         roles = [m.role for m in msgs]
-        assert roles == ["user", "assistant", "tool", "assistant"]
+        assert roles == ["system", "user", "assistant", "tool", "assistant"]
 
         checkpoints = store.get_checkpoints_by_branch(ctx.branch_id)
         assert len(checkpoints) > 0
