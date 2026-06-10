@@ -19,29 +19,131 @@ class FakeHomeClient:
         return self.files[path]
 
 
-class FakeMemoryClient:
+class FakeMemoryStore(SQLiteTimelineStore):
+    def __init__(self, memories: list[dict[str, str]] | None = None) -> None:
+        super().__init__(":memory:")
+        self.memories = memories or []
+        self.queries: list[str] = []
+
     def search_memory(self, query: str) -> list[dict[str, str]]:
-        return [{"type": "fact", "content": f"remembered for {query}"}]
+        self.queries.append(query)
+        return self.memories
 
 
-def test_message_commit_user_initializes_visible_messages_without_timeline_store():
+class FakeMemoryClient:
+    def __init__(self, memories: list[dict[str, str]] | None = None) -> None:
+        self.memories = memories or []
+        self.queries: list[str] = []
+
+    def search_memory(self, query: str) -> list[dict[str, str]]:
+        self.queries.append(query)
+        return self.memories
+
+
+def test_memory_prefetch_sets_enhanced_input_to_raw_input_when_no_memory():
+    memory = FakeMemoryClient()
+    ctx = RunContext(input="hello", home_client=memory)
+
+    MemoryPrefetch(limit=5).run(ctx)
+
+    assert memory.queries == ["hello"]
+    assert ctx.enhanced_input == "hello"
+
+
+def test_memory_prefetch_adds_memory_block_to_enhanced_input():
+    memory = FakeMemoryClient(
+        [
+            {"type": "user", "content": "Prefers concise answers."},
+            {"type": "project", "content": "Uses python3."},
+        ]
+    )
+    ctx = RunContext(input="hello", home_client=memory)
+
+    MemoryPrefetch(limit=5).run(ctx)
+
+    assert memory.queries == ["hello"]
+    assert ctx.enhanced_input == (
+        "<memory>\n"
+        "- [user] Prefers concise answers.\n"
+        "- [project] Uses python3.\n"
+        "</memory>\n\n"
+        "<user>\n"
+        "hello\n"
+        "</user>"
+    )
+
+
+def test_memory_prefetch_missing_search_memory_raises():
     ctx = RunContext(input="hello")
-    step = MessageCommitUser()
 
-    step.run(ctx)
-
-    assert ctx.messages == [{"role": "user", "content": "hello"}]
+    with pytest.raises(RuntimeError, match="search_memory is required"):
+        MemoryPrefetch().run(ctx)
 
 
-def test_memory_prefetch_before_message_commit_user_commits_enhanced_input():
-    ctx = RunContext(input="hello", home_client=FakeMemoryClient())
+def test_message_commit_user_appends_and_persists_enhanced_input_to_existing_messages():
+    store = FakeMemoryStore()
+    session = create_session_with_default_branch(store)
+    ctx = RunContext(
+        input="hello",
+        enhanced_input="<user>\nhello\n</user>",
+        messages=[{"role": "system", "content": "Use Agent Home."}],
+        session_id=session.session_id,
+        branch_id=session.active_branch_id,
+        timeline_store=store,
+    )
 
-    MemoryPrefetch().run(ctx)
     MessageCommitUser().run(ctx)
 
     assert ctx.messages == [
-        {"role": "user", "content": "hello\n\nMemory:\n- [fact] remembered for hello"}
+        {"role": "system", "content": "Use Agent Home."},
+        {"role": "user", "content": "<user>\nhello\n</user>"},
     ]
+    persisted = store.get_messages_by_branch(session.active_branch_id)
+    assert len(persisted) == 1
+    assert persisted[0].role == "user"
+    assert persisted[0].content == "<user>\nhello\n</user>"
+
+
+def test_message_commit_user_missing_requirements_raise():
+    store = FakeMemoryStore()
+    session = create_session_with_default_branch(store)
+
+    missing_store = RunContext(
+        enhanced_input="enhanced",
+        messages=[{"role": "system", "content": "Use Agent Home."}],
+        session_id=session.session_id,
+        branch_id=session.active_branch_id,
+    )
+    with pytest.raises(RuntimeError, match="timeline_store is required"):
+        MessageCommitUser().run(missing_store)
+
+    missing_session = RunContext(
+        enhanced_input="enhanced",
+        messages=[{"role": "system", "content": "Use Agent Home."}],
+        branch_id=session.active_branch_id,
+        timeline_store=store,
+    )
+    with pytest.raises(RuntimeError, match="session_id is required"):
+        MessageCommitUser().run(missing_session)
+
+    missing_branch = RunContext(
+        enhanced_input="enhanced",
+        messages=[{"role": "system", "content": "Use Agent Home."}],
+        session_id=session.session_id,
+        timeline_store=store,
+    )
+    with pytest.raises(RuntimeError, match="branch_id is required"):
+        MessageCommitUser().run(missing_branch)
+
+    missing_enhanced_input = RunContext(
+        input="hello",
+        messages=[{"role": "system", "content": "Use Agent Home."}],
+        session_id=session.session_id,
+        branch_id=session.active_branch_id,
+        timeline_store=store,
+    )
+    with pytest.raises(RuntimeError, match="enhanced_input is required"):
+        MessageCommitUser().run(missing_enhanced_input)
 
 
 def test_run_context_exposes_direct_model_request_fields():
@@ -110,7 +212,7 @@ def test_message_commit_user_appends_enhanced_input_after_context_initialize_his
 
     ctx = RunContext(
         input="hello",
-        enhanced_input="hello\n\nMemory:\n- [fact] remembered",
+        enhanced_input="<memory>\n- [fact] remembered\n</memory>\n\n<user>\nhello\n</user>",
         session_id=session.session_id,
         branch_id=session.active_branch_id,
         timeline_store=store,
@@ -121,12 +223,12 @@ def test_message_commit_user_appends_enhanced_input_after_context_initialize_his
 
     assert ctx.messages == [
         {"role": "system", "content": "First guidance"},
-        {"role": "user", "content": "hello\n\nMemory:\n- [fact] remembered"},
+        {"role": "user", "content": "<memory>\n- [fact] remembered\n</memory>\n\n<user>\nhello\n</user>"},
     ]
     persisted = store.get_messages_by_branch(session.active_branch_id)
     assert len(persisted) == 2
     assert persisted[1].role == "user"
-    assert persisted[1].content == "hello\n\nMemory:\n- [fact] remembered"
+    assert persisted[1].content == "<memory>\n- [fact] remembered\n</memory>\n\n<user>\nhello\n</user>"
 
 
 def test_context_initialize_loads_agent_file_from_agent_home():

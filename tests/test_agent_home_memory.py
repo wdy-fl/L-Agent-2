@@ -128,7 +128,14 @@ def test_memory_prefetch_injects_matching_memories():
 
     MemoryPrefetch(limit=5).run(ctx)
 
-    assert ctx.enhanced_input == "python command?\n\nMemory:\n- [preference] Use python3"
+    assert ctx.enhanced_input == (
+        "<memory>\n"
+        "- [preference] Use python3\n"
+        "</memory>\n\n"
+        "<user>\n"
+        "python command?\n"
+        "</user>"
+    )
 
 
 def test_memory_prefetch_falls_back_to_timeline_store_when_home_lacks_memory_search():
@@ -138,7 +145,14 @@ def test_memory_prefetch_falls_back_to_timeline_store_when_home_lacks_memory_sea
 
     MemoryPrefetch(limit=5).run(ctx)
 
-    assert ctx.enhanced_input == "python command?\n\nMemory:\n- [preference] Use python3"
+    assert ctx.enhanced_input == (
+        "<memory>\n"
+        "- [preference] Use python3\n"
+        "</memory>\n\n"
+        "<user>\n"
+        "python command?\n"
+        "</user>"
+    )
 
 
 def test_memory_prefetch_respects_limit():
@@ -148,7 +162,14 @@ def test_memory_prefetch_respects_limit():
 
     MemoryPrefetch(limit=1).run(ctx)
 
-    assert ctx.enhanced_input == "python command?\n\nMemory:\n- [preference] Use python3"
+    assert ctx.enhanced_input == (
+        "<memory>\n"
+        "- [preference] Use python3\n"
+        "</memory>\n\n"
+        "<user>\n"
+        "python command?\n"
+        "</user>"
+    )
 
 
 def test_memory_command_reports_when_store_does_not_support_memory():

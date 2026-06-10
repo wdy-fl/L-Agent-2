@@ -105,15 +105,20 @@ class MemoryPrefetch(Step):
                 search_memory = candidate
                 break
         if search_memory is None:
-            return
+            raise RuntimeError("search_memory is required")
         search = cast(Callable[[str], list[dict[str, Any]]], search_memory)
         memories = search(ctx.input)[: self._limit]
         if not memories:
+            ctx.enhanced_input = ctx.input
             return
-        lines = ["Memory:"]
-        lines.extend(f"- [{memory.get('type', '')}] {memory.get('content', '')}" for memory in memories)
-        memory_context = "\n".join(lines)
-        ctx.enhanced_input = f"{ctx.input}\n\n{memory_context}"
+        memory_lines = [f"- [{memory.get('type', '')}] {memory.get('content', '')}" for memory in memories]
+        ctx.enhanced_input = (
+            "<memory>\n"
+            + "\n".join(memory_lines)
+            + "\n</memory>\n\n<user>\n"
+            + ctx.input
+            + "\n</user>"
+        )
 
 
 class ToolsSnapshotAvailableTools(Step):
@@ -170,12 +175,18 @@ class MessageCommitUser(Step):
         super().__init__("message.commit_user", HookPhase.before_agent)
 
     def run(self, ctx: RunContext) -> None:
-        content = ctx.enhanced_input or ctx.input
-        ctx.messages.append({"role": "user", "content": content})
-
         store = ctx.timeline_store
         if store is None:
-            return
+            raise RuntimeError("timeline_store is required")
+        if not ctx.session_id:
+            raise RuntimeError("session_id is required")
+        if not ctx.branch_id:
+            raise RuntimeError("branch_id is required")
+        if not ctx.enhanced_input:
+            raise RuntimeError("enhanced_input is required")
+
+        ctx.messages.append({"role": "user", "content": ctx.enhanced_input})
+
         seq = store.get_latest_sequence(ctx.branch_id) + 1
         msg = Message(
             message_id=str(uuid.uuid4()),
@@ -184,7 +195,7 @@ class MessageCommitUser(Step):
             run_id=ctx.run_id,
             sequence=seq,
             role="user",
-            content=content,
+            content=ctx.enhanced_input,
         )
         store.append_message(msg)
 
