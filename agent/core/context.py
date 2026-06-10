@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from agent.llm.types import BaseModelContext, ModelRequest, ModelResponse
+from agent.llm.types import ModelConfig, ModelRequest, ModelResponse
 
 if TYPE_CHECKING:
     from agent.timeline.store import TimelineStore
@@ -35,6 +35,7 @@ class RunContext:
     run_id: str = ""
     input: str = ""
     raw_input: str = ""
+    enhanced_input: str = ""
     iteration_index: int = 0
     iterations: list[dict[str, Any]] = field(default_factory=list)
     errors: list[Exception] = field(default_factory=list)
@@ -43,8 +44,9 @@ class RunContext:
     # --- messages ---
     messages: list[dict[str, Any]] = field(default_factory=list)
 
-    # --- model context ---
-    base_model_context: BaseModelContext | None = None
+    # --- model request state ---
+    model_config: ModelConfig = field(default_factory=ModelConfig)
+    available_tools: list[dict[str, Any]] = field(default_factory=list)
     current_model_request: ModelRequest | None = None
     current_model_response: ModelResponse | None = None
 

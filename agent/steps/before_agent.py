@@ -5,7 +5,7 @@ from typing import Any, Callable, cast
 
 from agent.core.context import BudgetState, RunContext
 from agent.core.lifecycle import HookPhase
-from agent.llm.types import BaseModelContext, ModelConfig
+from agent.llm.types import ModelConfig
 from agent.steps.base import Step
 from agent.timeline.models import AgentRun, Checkpoint, CheckpointKind, Message
 from agent.tools.registry import ToolRegistry
@@ -36,10 +36,7 @@ class ContextInitialize(Step):
         if self._agent_file_path:
             guidance = self._load_agent_file(ctx)
 
-        ctx.base_model_context = BaseModelContext(
-            guidance=guidance,
-            model_config=self._model_config,
-        )
+        ctx.model_config = self._model_config
 
     def _load_agent_file(self, ctx: RunContext) -> str:
         path = self._agent_file_path

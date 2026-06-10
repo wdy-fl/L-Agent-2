@@ -5,17 +5,6 @@ from typing import Any
 
 
 @dataclass
-class BaseModelContext:
-    """Run-level immutable context, built once in before_agent."""
-
-    guidance: str = ""
-    workspace_context: str = ""
-    memory_context: str | None = None
-    available_tools: list[dict[str, Any]] = field(default_factory=list)
-    model_config: ModelConfig = field(default_factory=lambda: ModelConfig())
-
-
-@dataclass
 class ModelConfig:
     """Model configuration parameters."""
 

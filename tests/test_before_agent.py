@@ -26,6 +26,15 @@ def test_message_commit_user_initializes_visible_messages_without_timeline_store
     assert ctx.messages == [{"role": "user", "content": "hello"}]
 
 
+def test_run_context_exposes_direct_model_request_fields():
+    ctx = RunContext()
+
+    assert hasattr(ctx, "model_config")
+    assert hasattr(ctx, "available_tools")
+    assert hasattr(ctx, "enhanced_input")
+    assert not hasattr(ctx, "base_model_context")
+
+
 def test_context_initialize_loads_agent_file_from_agent_home():
     ctx = RunContext(home_client=FakeHomeClient({"/AGENT.md": "  Use Agent Home.\n"}))
     step = ContextInitialize(
