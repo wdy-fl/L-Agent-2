@@ -11,6 +11,8 @@ from agent.llm.types import (
     ToolCallRequest,
     Usage,
 )
+from agent.storage.sqlite import SQLiteTimelineStore
+from agent.timeline.session_factory import create_session_with_default_branch
 from agent.middleware.chain import MiddlewareChain
 from agent.middleware.model import BudgetGuard, TimeoutGuard, TraceRecord
 from agent.steps.after_model import (
@@ -35,6 +37,23 @@ from agent.steps.before_model import (
 from agent.steps.registry import StepRegistry
 
 
+class FakeTimelineStore(SQLiteTimelineStore):
+    def search_memory(self, query: str) -> list[dict[str, str]]:
+        return []
+
+
+def _ctx(input: str = "test") -> RunContext:
+    store = FakeTimelineStore(":memory:")
+    session = create_session_with_default_branch(store)
+    return RunContext(
+        input=input,
+        session_id=session.session_id,
+        branch_id=session.active_branch_id,
+        timeline_store=store,
+        home_client=store,
+    )
+
+
 class FakeLLMClient(LLMClient):
     """A fake LLM client that returns a canned response."""
 
@@ -54,8 +73,8 @@ def _build_full_registry(model_config: ModelConfig | None = None) -> StepRegistr
         guidance="You are a helpful assistant.\n\nBe concise.",
         model_config=model_config or ModelConfig(),
     ))
-    reg.register(MessageCommitUser())
     reg.register(MemoryPrefetch())
+    reg.register(MessageCommitUser())
     reg.register(ToolsSnapshotAvailableTools())
     reg.register(BudgetInitialize(max_iterations=10, max_tokens=100_000))
 
@@ -103,7 +122,7 @@ class TestIntegrationFullLifecycle:
             model_call=model_action,
         )
 
-        ctx = RunContext(input="  Hello world  ")
+        ctx = _ctx(input="  Hello world  ")
         result = await runner.run_to_completion(ctx)
 
         assert result.status == "completed"
@@ -129,7 +148,7 @@ class TestIntegrationFullLifecycle:
             model_call=make_llm_call_action(client),
         )
 
-        ctx = RunContext(input="test")
+        ctx = _ctx(input="test")
         await runner.run_to_completion(ctx)
 
         assert not hasattr(ctx, "base_model_context")
@@ -173,7 +192,7 @@ class TestIntegrationFullLifecycle:
             tool_call=lambda ctx: None,
         )
 
-        ctx = RunContext(input="test")
+        ctx = _ctx(input="test")
 
         await runner.run_to_completion(ctx)
 
@@ -199,7 +218,7 @@ class TestIntegrationFullLifecycle:
             model_call=make_llm_call_action(client),
         )
 
-        ctx = RunContext(input="hi")
+        ctx = _ctx(input="hi")
         await runner.run_to_completion(ctx)
 
         assert ctx.iteration_index == 1
@@ -225,7 +244,7 @@ class TestBudgetGuard:
             model_call=make_llm_call_action(client),
         )
 
-        ctx = RunContext(input="test")
+        ctx = _ctx(input="test")
         ctx.budget.max_iterations = 2
 
         # Simulate being at iteration 3 already consumed
@@ -253,8 +272,8 @@ class TestBudgetGuard:
         # Use a custom low-budget registry
         reg = StepRegistry()
         reg.register(ContextInitialize(guidance="test"))
-        reg.register(MessageCommitUser())
         reg.register(MemoryPrefetch())
+        reg.register(MessageCommitUser())
         reg.register(ToolsSnapshotAvailableTools())
         reg.register(BudgetInitialize(max_iterations=10, max_tokens=100_000))
         reg.register(IterationCreate())
@@ -276,7 +295,7 @@ class TestBudgetGuard:
             tool_call=lambda ctx: None,
         )
 
-        ctx = RunContext(input="test")
+        ctx = _ctx(input="test")
         await runner.run_to_completion(ctx)
 
         # First call uses 110k tokens total (80k+30k), exceeding 100k budget.
@@ -310,7 +329,7 @@ class TestTimeoutGuard:
             model_call=make_llm_call_action(client),
         )
 
-        ctx = RunContext(input="test")
+        ctx = _ctx(input="test")
         await runner.run_to_completion(ctx)
 
         assert len(ctx.errors) == 1
@@ -334,7 +353,7 @@ class TestTimeoutGuard:
             model_call=make_llm_call_action(client),
         )
 
-        ctx = RunContext(input="test")
+        ctx = _ctx(input="test")
         await runner.run_to_completion(ctx)
 
         assert ctx.final_result == "fast response"
@@ -361,7 +380,7 @@ class TestTraceRecord:
             model_call=make_llm_call_action(client),
         )
 
-        ctx = RunContext(input="test")
+        ctx = _ctx(input="test")
         await runner.run_to_completion(ctx)
 
         assert len(ctx.iterations) == 1

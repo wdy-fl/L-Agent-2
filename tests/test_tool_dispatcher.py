@@ -14,6 +14,8 @@ from agent.llm.types import (
     ToolCallRequest,
     Usage,
 )
+from agent.storage.sqlite import SQLiteTimelineStore
+from agent.timeline.session_factory import create_session_with_default_branch
 from agent.middleware.chain import MiddlewareChain
 from agent.middleware.model import BudgetGuard, TraceRecord
 from agent.middleware.tool import ApprovalGuard, AuditRecord, ResultLimitGuard
@@ -52,6 +54,23 @@ from agent.tools.dispatcher import ToolDispatcher
 from agent.tools.registry import ToolRegistry
 
 
+class FakeTimelineStore(SQLiteTimelineStore):
+    def search_memory(self, query: str) -> list[dict[str, str]]:
+        return []
+
+
+def _ctx(input: str = "test") -> RunContext:
+    store = FakeTimelineStore(":memory:")
+    session = create_session_with_default_branch(store)
+    return RunContext(
+        input=input,
+        session_id=session.session_id,
+        branch_id=session.active_branch_id,
+        timeline_store=store,
+        home_client=store,
+    )
+
+
 def _build_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(think_tool)
@@ -67,8 +86,8 @@ def _build_full_registry(tool_registry: ToolRegistry | None = None) -> StepRegis
         guidance="You are a helpful assistant.\n\nBe concise.",
         model_config=ModelConfig(),
     ))
-    reg.register(MessageCommitUser())
     reg.register(MemoryPrefetch())
+    reg.register(MessageCommitUser())
     reg.register(ToolsSnapshotAvailableTools(registry=tr))
     reg.register(BudgetInitialize(max_iterations=10, max_tokens=100_000))
 
@@ -238,7 +257,7 @@ class TestSingleRoundToolCall:
             tool_call=make_tool_call_action(dispatcher),
         )
 
-        ctx = RunContext(input="What is the meaning of life?")
+        ctx = _ctx(input="What is the meaning of life?")
         await runner.run_to_completion(ctx)
 
         assert ctx.status == "completed"
@@ -305,7 +324,7 @@ class TestMultiRoundToolCall:
             tool_call=make_tool_call_action(dispatcher),
         )
 
-        ctx = RunContext(input="Analyze this problem")
+        ctx = _ctx(input="Analyze this problem")
         await runner.run_to_completion(ctx)
 
         assert ctx.status == "completed"
@@ -355,7 +374,7 @@ class TestMultiRoundToolCall:
             tool_call=make_tool_call_action(dispatcher),
         )
 
-        ctx = RunContext(input="Do both things")
+        ctx = _ctx(input="Do both things")
         await runner.run_to_completion(ctx)
 
         assert ctx.status == "completed"
@@ -440,7 +459,7 @@ class TestApprovalDenied:
             tool_call=make_tool_call_action(dispatcher),
         )
 
-        ctx = RunContext(input="Do something")
+        ctx = _ctx(input="Do something")
         await runner.run_to_completion(ctx)
 
         assert ctx.status == "completed"
@@ -493,7 +512,7 @@ class TestToolErrors:
             tool_call=make_tool_call_action(dispatcher),
         )
 
-        ctx = RunContext(input="Use nonexistent tool")
+        ctx = _ctx(input="Use nonexistent tool")
         await runner.run_to_completion(ctx)
 
         assert ctx.status == "completed"
@@ -541,7 +560,7 @@ class TestToolErrors:
             tool_call=make_tool_call_action(dispatcher),
         )
 
-        ctx = RunContext(input="Call with bad args")
+        ctx = _ctx(input="Call with bad args")
         await runner.run_to_completion(ctx)
 
         assert ctx.status == "completed"
@@ -590,7 +609,7 @@ class TestToolErrors:
             tool_call=make_tool_call_action(dispatcher),
         )
 
-        ctx = RunContext(input="Call without required param")
+        ctx = _ctx(input="Call without required param")
         await runner.run_to_completion(ctx)
 
         assert ctx.status == "completed"
@@ -648,7 +667,7 @@ class TestResultLimitGuard:
             tool_call=make_tool_call_action(dispatcher),
         )
 
-        ctx = RunContext(input="Run verbose tool")
+        ctx = _ctx(input="Run verbose tool")
         await runner.run_to_completion(ctx)
 
         assert ctx.status == "completed"
@@ -682,7 +701,7 @@ class TestSnapshotAvailableTools:
             model_call=make_llm_call_action(SimpleClient()),
         )
 
-        ctx = RunContext(input="test")
+        ctx = _ctx(input="test")
         await runner.run_to_completion(ctx)
 
         assert len(ctx.available_tools) == 1
@@ -711,7 +730,7 @@ class TestSnapshotAvailableTools:
             model_call=make_llm_call_action(CapturingClient()),
         )
 
-        ctx = RunContext(input="test")
+        ctx = _ctx(input="test")
         await runner.run_to_completion(ctx)
 
         assert captured_request[0] is not None
@@ -763,7 +782,7 @@ class TestReActLoopMessages:
             tool_call=make_tool_call_action(dispatcher),
         )
 
-        ctx = RunContext(input="test")
+        ctx = _ctx(input="test")
         await runner.run_to_completion(ctx)
 
         # Second call should see: user + assistant(tool_calls) + tool_result

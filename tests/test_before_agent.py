@@ -4,6 +4,7 @@ from agent.core.context import RunContext
 from agent.llm.types import ModelConfig
 from agent.storage.sqlite import SQLiteTimelineStore
 from agent.steps.before_agent import ContextInitialize, MemoryPrefetch, MessageCommitUser
+from agent.steps.before_model import ModelRequestCompose
 from agent.timeline.session_factory import create_session_with_default_branch
 
 
@@ -153,6 +154,21 @@ def test_run_context_exposes_direct_model_request_fields():
     assert hasattr(ctx, "available_tools")
     assert hasattr(ctx, "enhanced_input")
     assert not hasattr(ctx, "base_model_context")
+
+
+def test_model_request_compose_uses_messages_tools_and_model_config_directly():
+    ctx = RunContext(messages=[{"role": "system", "content": "System"}])
+    ctx.available_tools = [{"type": "function", "function": {"name": "think", "parameters": {"type": "object"}}}]
+    ctx.model_config = ModelConfig(model="test-model", temperature=0.2, max_tokens=123)
+
+    ModelRequestCompose().run(ctx)
+
+    assert ctx.current_model_request is not None
+    assert ctx.current_model_request.messages == [{"role": "system", "content": "System"}]
+    assert ctx.current_model_request.tools == ctx.available_tools
+    assert ctx.current_model_request.model == "test-model"
+    assert ctx.current_model_request.temperature == 0.2
+    assert ctx.current_model_request.max_tokens == 123
 
 
 def test_context_initialize_creates_persisted_system_message_for_new_session():
