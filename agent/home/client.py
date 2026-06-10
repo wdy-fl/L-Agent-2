@@ -72,30 +72,37 @@ class AgentHomeClient(TimelineStore):
 
     # --- Workspace adapter ---
     def workspace_put(self, path: str, content: str | bytes) -> dict[str, Any]:
-        body = content.encode("utf-8") if isinstance(content, str) else content
+        if isinstance(content, bytes):
+            content = content.decode("utf-8")
         return self._request(
-            "PUT",
-            f"/v1/agents/{self.agent_id}/workspace/object",
-            params={"path": path},
-            content=body,
+            "POST",
+            f"/v1/agents/{self.agent_id}/workspace/files/write",
+            json={"path": path, "content": content},
         ).json()
 
     def workspace_get_bytes(self, path: str) -> bytes:
-        return self._request(
-            "GET",
-            f"/v1/agents/{self.agent_id}/workspace/object",
-            params={"path": path},
-        ).content
+        body = self._request(
+            "POST",
+            f"/v1/agents/{self.agent_id}/workspace/files/read",
+            json={"path": path},
+        ).json()
+        return body["content"].encode("utf-8")
 
     def workspace_get_text(self, path: str) -> str:
-        return self.workspace_get_bytes(path).decode("utf-8", errors="replace")
+        body = self._request(
+            "POST",
+            f"/v1/agents/{self.agent_id}/workspace/files/read",
+            json={"path": path},
+        ).json()
+        return body["content"]
 
     def workspace_list(self, prefix: str = "/") -> list[dict[str, Any]]:
-        return self._request(
-            "GET",
-            f"/v1/agents/{self.agent_id}/workspace/objects",
-            params={"prefix": prefix},
+        body = self._request(
+            "POST",
+            f"/v1/agents/{self.agent_id}/workspace/files/list",
+            json={"path": prefix},
         ).json()
+        return body["entries"]
 
     def workspace_run_command(self, command: str, timeout_seconds: int = 120, env: dict[str, str] | None = None) -> dict[str, Any]:
         return self._request(

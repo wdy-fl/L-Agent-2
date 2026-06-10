@@ -27,7 +27,7 @@ class FakeHome:
     def workspace_list(self, prefix):
         self.lists.append(prefix)
         return [
-            {"path": path, "kind": "file", "size": len(body)}
+            {"name": path.split("/")[-1], "type": "file", "size": len(body)}
             for path, body in sorted(self.files.items())
             if path.startswith(prefix)
         ]

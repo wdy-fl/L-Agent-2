@@ -210,10 +210,11 @@ def create_agent_home_file_tools(home_client: AgentHomeWorkspace) -> list[ToolSp
         del kwargs
         entries = []
         for item in home_client.workspace_list(path):
-            logical_path = item.get("path", "")
-            if pattern and not fnmatch.fnmatch(os.path.basename(logical_path), pattern):
+            name = item.get("name", "")
+            if pattern and not fnmatch.fnmatch(name, pattern):
                 continue
-            entries.append(logical_path)
+            suffix = "/" if item.get("type") == "dir" else ""
+            entries.append(f"{path.rstrip('/')}/{name}{suffix}")
         return "\n".join(entries) if entries else "(empty)"
 
     def search_file(pattern: str, path: str = "/", file_pattern: str | None = None) -> str:
@@ -224,11 +225,12 @@ def create_agent_home_file_tools(home_client: AgentHomeWorkspace) -> list[ToolSp
 
         matches: list[str] = []
         for item in home_client.workspace_list(path):
-            logical_path = item.get("path", "")
-            if item.get("kind", "file") != "file":
+            name = item.get("name", "")
+            if item.get("type", "file") != "file":
                 continue
-            if file_pattern and not fnmatch.fnmatch(os.path.basename(logical_path), file_pattern):
+            if file_pattern and not fnmatch.fnmatch(name, file_pattern):
                 continue
+            logical_path = f"{path.rstrip('/')}/{name}"
             try:
                 text = home_client.workspace_get_text(logical_path)
             except (OSError, UnicodeDecodeError):
