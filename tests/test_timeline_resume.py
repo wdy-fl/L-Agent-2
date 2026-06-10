@@ -11,9 +11,11 @@ from agent.steps.before_agent import (
     BudgetInitialize,
     CheckpointCreateUserSnapshot,
     ContextInitialize,
+    MemoryPrefetch,
     MessageCommitUser,
     RunCreate,
 )
+from agent.steps.before_model import ModelRequestCompose
 from agent.steps.registry import StepRegistry
 from agent.storage.sqlite import SQLiteTimelineStore
 from agent.timeline.models import CheckpointKind
@@ -22,13 +24,20 @@ from agent.timeline.rewind import RewindResult, rewind
 from agent.timeline.session_factory import create_session_with_default_branch
 
 
+class MemorySQLiteTimelineStore(SQLiteTimelineStore):
+    def search_memory(self, query: str) -> list[dict[str, str]]:
+        return []
+
+
 def _build_full_registry() -> StepRegistry:
     reg = StepRegistry()
     reg.register(ContextInitialize())
-    reg.register(BudgetInitialize())
     reg.register(RunCreate())
+    reg.register(MemoryPrefetch())
     reg.register(MessageCommitUser())
     reg.register(CheckpointCreateUserSnapshot())
+    reg.register(BudgetInitialize())
+    reg.register(ModelRequestCompose())
     reg.register(MessageCommitAssistant())
     reg.register(UsageUpdate())
     reg.register(ResultDetectFinalAnswer())
@@ -55,7 +64,7 @@ async def _run_agent(store: SQLiteTimelineStore, session_id: str, branch_id: str
 
 class TestSessionFactory:
     def test_create_session_with_default_branch(self):
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
 
         assert session.active_branch_id != ""
@@ -67,7 +76,7 @@ class TestSessionFactory:
 
 class TestBranchUpdateResumeHead:
     async def test_updates_on_completed_run(self):
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
         branch_id = session.active_branch_id
 
@@ -79,7 +88,7 @@ class TestBranchUpdateResumeHead:
         assert branch.resume_head != ""
 
     async def test_does_not_update_on_failed_run(self):
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
         branch_id = session.active_branch_id
 
@@ -97,7 +106,7 @@ class TestBranchUpdateResumeHead:
 class TestResumeMultiTurn:
     async def test_resume_restores_full_context(self):
         """After multiple turns, resume restores all messages."""
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
         branch_id = session.active_branch_id
 
@@ -116,7 +125,7 @@ class TestResumeMultiTurn:
 
     async def test_resume_model_sees_all_history(self):
         """Resume messages include content from all turns."""
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
         branch_id = session.active_branch_id
 
@@ -128,11 +137,34 @@ class TestResumeMultiTurn:
         assert "first question" in contents
         assert "second question" in contents
 
+    async def test_second_turn_model_request_contains_prior_context(self):
+        store = MemorySQLiteTimelineStore(":memory:")
+        session = create_session_with_default_branch(store)
+        branch_id = session.active_branch_id
+        requests: list[list[dict[str, object]]] = []
+
+        def model_fn(c: RunContext):
+            assert c.current_model_request is not None
+            requests.append([dict(message) for message in c.current_model_request.messages])
+            return ModelResponse(content=f"reply to: {c.input}", usage=Usage(input_tokens=5, output_tokens=3))
+
+        await _run_agent(store, session.session_id, branch_id, "previous user", model_fn=model_fn)
+        await _run_agent(store, session.session_id, branch_id, "current user", model_fn=model_fn)
+
+        second_turn = requests[1]
+        assert [m["role"] for m in second_turn] == ["system", "user", "assistant", "user"]
+        assert [m["content"] for m in second_turn] == [
+            "",
+            "previous user",
+            "reply to: previous user",
+            "current user",
+        ]
+
 
 class TestRewind:
     async def test_rewind_creates_new_branch(self):
         """Rewind to a user message creates a new branch with correct context."""
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
         branch_id = session.active_branch_id
 
@@ -153,12 +185,16 @@ class TestRewind:
         assert user_msgs[0].content == "first"
         assert user_msgs[1].content == "second"
 
+        contents = [m.content for m in result.messages]
+        assert "third" not in contents
+        assert "partial..." not in contents
+
         assistant_msgs = [m for m in result.messages if m.role == "assistant"]
         assert len(assistant_msgs) == 1
 
     async def test_old_branch_preserved(self):
         """After rewind, old branch history remains intact."""
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
         branch_id = session.active_branch_id
 
@@ -178,7 +214,7 @@ class TestRewind:
 
     async def test_new_branch_appends_normally(self):
         """After rewind, new branch accepts new messages normally."""
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
         branch_id = session.active_branch_id
 
@@ -202,7 +238,7 @@ class TestRewind:
 
     async def test_rewind_rejects_non_user_snapshot(self):
         """Rewind only works with user_snapshot checkpoints."""
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
         branch_id = session.active_branch_id
 
@@ -221,7 +257,7 @@ class TestRewind:
 class TestInterruptedResume:
     async def test_resume_after_interrupted_run(self):
         """When last run was interrupted, resume goes to previous completed state."""
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
         branch_id = session.active_branch_id
 
@@ -243,3 +279,7 @@ class TestInterruptedResume:
         assert len(user_msgs) == 2
         assert user_msgs[0].content == "first"
         assert user_msgs[1].content == "second"
+
+        contents = [m.content for m in result.messages]
+        assert "third" not in contents
+        assert "partial..." not in contents

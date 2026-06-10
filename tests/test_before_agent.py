@@ -41,6 +41,57 @@ class FakeMemoryClient:
         return self.memories
 
 
+def test_production_before_agent_registration_order(monkeypatch):
+    from agent.core import factory
+    from agent.core.lifecycle import HookPhase
+
+    class FakeSettings:
+        class llm:
+            api_key = "key"
+            model = "test-model"
+            api_base = "https://example.test"
+            temperature = 0.1
+            max_tokens = 100
+
+        class agent:
+            agent_file_path = "/AGENT.md"
+
+        class agent_home:
+            memory_prefetch_limit = 7
+            auto_extract_memory = False
+
+        class budget:
+            max_iterations = 3
+            max_tokens = 1000
+
+        class context:
+            max_context_tokens = 1000
+            compression_threshold = 0.9
+            protected_head = 1
+            protected_tail_tokens = 100
+            min_saving = 10
+
+    class FakeToolRegistry:
+        def list_schemas(self):
+            return []
+
+    monkeypatch.setattr(factory, "load_settings", lambda config_path=None: FakeSettings())
+    monkeypatch.setattr(factory, "create_builtin_registry", lambda home_client=None: FakeToolRegistry())
+
+    runner = factory.build_runner()
+
+    names = [step.name for step in runner._registry.get_steps(HookPhase.before_agent)]
+    assert names == [
+        "context.initialize",
+        "run.create",
+        "memory.prefetch",
+        "message.commit_user",
+        "checkpoint.create_user_snapshot",
+        "tools.snapshot_available_tools",
+        "budget.initialize",
+    ]
+
+
 def test_memory_prefetch_sets_enhanced_input_to_raw_input_when_no_memory():
     memory = FakeMemoryClient()
     ctx = RunContext(input="hello", home_client=memory)

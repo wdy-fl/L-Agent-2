@@ -20,6 +20,11 @@ from agent.llm.types import ModelResponse, ToolCallRequest, Usage
 from agent.middleware.chain import MiddlewareChain
 from agent.steps.registry import StepRegistry
 from agent.storage.sqlite import SQLiteTimelineStore
+
+
+class MemorySQLiteTimelineStore(SQLiteTimelineStore):
+    def search_memory(self, query: str) -> list[dict[str, str]]:
+        return []
 from agent.timeline.session_factory import create_session_with_default_branch
 
 
@@ -137,18 +142,19 @@ class TestSessionManagementCommands:
         from agent.steps.after_model import MessageCommitAssistant, ResultDetectFinalAnswer, UsageUpdate
         from agent.steps.before_agent import (
             BudgetInitialize, CheckpointCreateUserSnapshot,
-            ContextInitialize, MessageCommitUser, RunCreate,
+            ContextInitialize, MemoryPrefetch, MessageCommitUser, RunCreate,
         )
 
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
 
         reg = StepRegistry()
         reg.register(ContextInitialize())
-        reg.register(BudgetInitialize())
         reg.register(RunCreate())
+        reg.register(MemoryPrefetch())
         reg.register(MessageCommitUser())
         reg.register(CheckpointCreateUserSnapshot())
+        reg.register(BudgetInitialize())
         reg.register(MessageCommitAssistant())
         reg.register(UsageUpdate())
         reg.register(ResultDetectFinalAnswer())
@@ -244,18 +250,19 @@ class TestFullConversationFlow:
         from agent.steps.after_model import MessageCommitAssistant, ResultDetectFinalAnswer, UsageUpdate
         from agent.steps.before_agent import (
             BudgetInitialize, CheckpointCreateUserSnapshot,
-            ContextInitialize, MessageCommitUser, RunCreate,
+            ContextInitialize, MemoryPrefetch, MessageCommitUser, RunCreate,
         )
 
-        store = SQLiteTimelineStore(":memory:")
+        store = MemorySQLiteTimelineStore(":memory:")
         session = create_session_with_default_branch(store)
 
         reg = StepRegistry()
         reg.register(ContextInitialize())
-        reg.register(BudgetInitialize())
         reg.register(RunCreate())
+        reg.register(MemoryPrefetch())
         reg.register(MessageCommitUser())
         reg.register(CheckpointCreateUserSnapshot())
+        reg.register(BudgetInitialize())
         reg.register(MessageCommitAssistant())
         reg.register(UsageUpdate())
         reg.register(ResultDetectFinalAnswer())
