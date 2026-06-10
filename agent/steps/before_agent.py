@@ -8,7 +8,17 @@ from agent.core.lifecycle import HookPhase
 from agent.llm.types import ModelConfig
 from agent.steps.base import Step
 from agent.timeline.models import AgentRun, Checkpoint, CheckpointKind, Message
+from agent.timeline.resume import resume
 from agent.tools.registry import ToolRegistry
+
+
+def _message_to_dict(message: Message) -> dict[str, Any]:
+    data: dict[str, Any] = {"role": message.role, "content": message.content}
+    if message.tool_calls:
+        data["tool_calls"] = message.tool_calls
+    if message.tool_call_id:
+        data["tool_call_id"] = message.tool_call_id
+    return data
 
 
 class ContextInitialize(Step):
@@ -31,12 +41,41 @@ class ContextInitialize(Step):
         ctx.iterations = []
         ctx.iteration_index = 0
         ctx.status = "running"
+        ctx.model_config = self._model_config
+
+        if ctx.messages:
+            return
+
+        if ctx.timeline_store is None:
+            raise RuntimeError("timeline_store is required")
+        if not ctx.session_id:
+            raise RuntimeError("session_id is required")
+        if not ctx.branch_id:
+            raise RuntimeError("branch_id is required")
+
+        result = resume(ctx.timeline_store, ctx.session_id)
+        ctx.messages = [_message_to_dict(message) for message in result.messages]
+        if ctx.messages:
+            return
 
         guidance = self._guidance
         if self._agent_file_path:
             guidance = self._load_agent_file(ctx)
 
-        ctx.model_config = self._model_config
+        ctx.messages.append({"role": "system", "content": guidance})
+
+        seq = ctx.timeline_store.get_latest_sequence(ctx.branch_id) + 1
+        ctx.timeline_store.append_message(
+            Message(
+                message_id=str(uuid.uuid4()),
+                session_id=ctx.session_id,
+                branch_id=ctx.branch_id,
+                run_id=ctx.run_id,
+                sequence=seq,
+                role="system",
+                content=guidance,
+            )
+        )
 
     def _load_agent_file(self, ctx: RunContext) -> str:
         path = self._agent_file_path
