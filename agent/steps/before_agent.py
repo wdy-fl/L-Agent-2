@@ -131,8 +131,9 @@ class MessageCommitUser(Step):
         super().__init__("message.commit_user", HookPhase.before_agent)
 
     def run(self, ctx: RunContext) -> None:
+        content = ctx.enhanced_input or ctx.input
         if not ctx.messages:
-            ctx.messages = [{"role": "user", "content": ctx.input}]
+            ctx.messages = [{"role": "user", "content": content}]
 
         store = ctx.timeline_store
         if store is None:
@@ -145,7 +146,7 @@ class MessageCommitUser(Step):
             run_id=ctx.run_id,
             sequence=seq,
             role="user",
-            content=ctx.input,
+            content=content,
         )
         store.append_message(msg)
 

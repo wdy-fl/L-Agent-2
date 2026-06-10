@@ -2,7 +2,7 @@ import pytest
 
 from agent.core.context import RunContext
 from agent.llm.types import ModelConfig
-from agent.steps.before_agent import ContextInitialize, MessageCommitUser
+from agent.steps.before_agent import ContextInitialize, MemoryPrefetch, MessageCommitUser
 
 
 class FakeHomeClient:
@@ -17,6 +17,11 @@ class FakeHomeClient:
         return self.files[path]
 
 
+class FakeMemoryClient:
+    def search_memory(self, query: str) -> list[dict[str, str]]:
+        return [{"type": "fact", "content": f"remembered for {query}"}]
+
+
 def test_message_commit_user_initializes_visible_messages_without_timeline_store():
     ctx = RunContext(input="hello")
     step = MessageCommitUser()
@@ -24,6 +29,17 @@ def test_message_commit_user_initializes_visible_messages_without_timeline_store
     step.run(ctx)
 
     assert ctx.messages == [{"role": "user", "content": "hello"}]
+
+
+def test_memory_prefetch_before_message_commit_user_commits_enhanced_input():
+    ctx = RunContext(input="hello", home_client=FakeMemoryClient())
+
+    MemoryPrefetch().run(ctx)
+    MessageCommitUser().run(ctx)
+
+    assert ctx.messages == [
+        {"role": "user", "content": "hello\n\nMemory:\n- [fact] remembered for hello"}
+    ]
 
 
 def test_run_context_exposes_direct_model_request_fields():

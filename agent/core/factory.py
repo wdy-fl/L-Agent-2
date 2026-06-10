@@ -76,9 +76,9 @@ def build_runner(config_path: Path | None = None, home_client=None) -> AgentRunn
         model_config=model_config,
     ))
     reg.register(RunCreate())
+    reg.register(MemoryPrefetch(limit=settings.agent_home.memory_prefetch_limit))
     reg.register(MessageCommitUser())
     reg.register(CheckpointCreateUserSnapshot())
-    reg.register(MemoryPrefetch(limit=settings.agent_home.memory_prefetch_limit))
     reg.register(ToolsSnapshotAvailableTools(registry=tool_registry))
     reg.register(BudgetInitialize(
         max_iterations=settings.budget.max_iterations,
