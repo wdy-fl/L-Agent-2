@@ -151,10 +151,13 @@ class TestIntegrationFullLifecycle:
         ctx = _ctx(input="test")
         await runner.run_to_completion(ctx)
 
-        assert not hasattr(ctx, "base_model_context")
-        assert not hasattr(ctx, "identity")
         assert ctx.model_config.model == "deepseek-chat"
         assert ctx.available_tools == []
+        assert ctx.messages[0] == {"role": "system", "content": "You are a helpful assistant.
+
+Be concise."}
+        persisted = ctx.timeline_store.get_messages_by_branch(ctx.branch_id)
+        assert [message.role for message in persisted] == ["system", "user", "assistant"]
 
     async def test_model_request_rebuilt_each_iteration(self):
         """With tool calls, model_request should be rebuilt on second iteration."""

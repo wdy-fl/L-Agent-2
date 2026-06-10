@@ -204,7 +204,9 @@ def test_run_context_exposes_direct_model_request_fields():
     assert hasattr(ctx, "model_config")
     assert hasattr(ctx, "available_tools")
     assert hasattr(ctx, "enhanced_input")
-    assert not hasattr(ctx, "base_model_context")
+    assert ctx.model_config is None
+    assert ctx.available_tools == []
+    assert ctx.enhanced_input is None
 
 
 def test_model_request_compose_uses_messages_tools_and_model_config_directly():
@@ -314,9 +316,12 @@ def test_context_initialize_loads_agent_file_from_agent_home():
 
     step.run(ctx)
 
-    assert not hasattr(ctx, "base_model_context")
     assert ctx.model_config.model == "test-model"
     assert ctx.messages == [{"role": "system", "content": "Use Agent Home."}]
+    persisted = store.get_messages_by_branch(session.active_branch_id)
+    assert len(persisted) == 1
+    assert persisted[0].role == "system"
+    assert persisted[0].content == "Use Agent Home."
     assert ctx.home_client.read_paths == ["/AGENT.md"]
 
 
@@ -332,8 +337,11 @@ def test_context_initialize_keeps_inline_guidance_when_agent_file_path_empty():
 
     step.run(ctx)
 
-    assert not hasattr(ctx, "base_model_context")
     assert ctx.messages == [{"role": "system", "content": "Inline guidance"}]
+    persisted = store.get_messages_by_branch(session.active_branch_id)
+    assert len(persisted) == 1
+    assert persisted[0].role == "system"
+    assert persisted[0].content == "Inline guidance"
 
 
 def test_context_initialize_requires_timeline_store():
