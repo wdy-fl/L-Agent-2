@@ -42,6 +42,8 @@ config.yaml
 *.local.yml
 workspace/
 .worktrees/
+.claude/
+CLAUDE.md
 
 # Logs and runtime files
 *.log
